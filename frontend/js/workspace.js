@@ -15,14 +15,14 @@
 
   /* ---------- role → allowed buttons ---------- */
   var NAV = {
-    student:        [['solve', 'Solve', 'check'], ['meetings', 'Meetings', 'calendar']],
-    representative: [['submit', 'Submit', 'inbox'], ['solve', 'Solve', 'check'], ['meetings', 'Meetings', 'calendar']],
-    supervisor:     [['submit', 'Submit', 'inbox'], ['assign', 'Assign', 'share'], ['review', 'Review', 'report'], ['verify', 'Verify', 'check'], ['meetings', 'Schedule meetings', 'calendar']],
+    student:        [['submit', 'Submit', 'inbox'], ['solve', 'Solve', 'check'], ['track', 'Track', 'report'], ['meetings', 'Meeting', 'calendar']],
+    representative: [['submit', 'Submit', 'inbox'], ['solve', 'Solve', 'check'], ['track', 'Track', 'report'], ['meetings', 'Meeting', 'calendar']],
+    supervisor:     [['submit', 'Submit', 'inbox'], ['solve', 'Solve', 'check'], ['track', 'Track', 'report'], ['meetings', 'Meeting', 'calendar']],
     admin:          [['approvals', 'Approvals', 'user'], ['meetings', 'Meetings', 'calendar']]
   };
   var TITLES = {
-    solve: 'Solve', submit: 'Submit a challenge', assign: 'Assign challenges', review: 'Review submissions',
-    verify: 'Verify completed work', meetings: 'Meetings', approvals: 'Account approvals'
+    solve: 'Solve', submit: 'Submit', track: 'Track', meetings: 'Meeting',
+    assign: 'Assign challenges', review: 'Review submissions', verify: 'Verify completed work', approvals: 'Account approvals'
   };
 
   /* ---------- small helpers ---------- */
@@ -135,29 +135,39 @@
   /* ---------- empty prompt ---------- */
   function renderEmpty() {
     var pt = document.getElementById('page-title'); if (pt) { pt.textContent = 'Workspace'; document.title = 'Workspace — Development Challenges Community'; }
-    var hints = {
-      student: 'Update progress on your assigned challenges, submit completed work, or request to solve a new challenge.',
-      representative: 'Submit a challenge, respond to information requests, and track the work assigned to you.',
-      supervisor: 'Submit challenges, assign students, review submissions, verify completed work and schedule meetings.',
-      admin: 'Approve new accounts, unlock locked accounts and keep an eye on system activity.'
-    };
-    document.getElementById('content').innerHTML =
-      '<div class="ws-empty"><span class="ic">' + U.icon('grid', 'size-5') + '</span>' +
-      '<h2>Welcome, ' + esc(ME.name) + '</h2>' +
-      '<p>Choose an action above to get started. ' + esc(hints[role] || '') + '</p></div>';
+    document.getElementById('content').innerHTML = '';
   }
 
   /* ---------- panel dispatch ---------- */
+  function restrictionPanel(title, message) {
+    var pt = document.getElementById('page-title'); if (pt) { pt.textContent = title; document.title = title + ' — Development Challenges Community'; }
+    return '<div class="ws-empty"><span class="ic">' + U.icon('x', 'size-5') + '</span><h2>' + esc(title) + '</h2><p>' + esc(message) + '</p></div>';
+  }
+  function trackPanel() {
+    var list = [];
+    if (role === 'student') list = D.mine || [];
+    if (role === 'representative') list = D.subs || [];
+    if (role === 'supervisor') list = D.challenges || [];
+    var cols = [['Challenge', 'minmax(0,1fr)'], ['Status', '150px'], ['Time left', '84px'], ['Action', '112px']];
+    var rows = list.filter(match).map(function (c) {
+      var act = '<button data-view="' + c.id + '" class="btn btn-sm w-full">Open</button>';
+      return [U.cell(c.title, c.id + (c.team ? ' · ' + esc(c.team) : c.to ? ' · ' + esc(c.to) : c.supervisor ? ' · ' + esc(c.supervisor) : '')), U.badge(c.status), dueCell(c.due), act];
+    });
+    return panelHead('track', 'Track the progress and current status of challenges in your workspace.') +
+      U.card({ id: 'track', title: 'Challenge progress', count: rows.length, body: U.table(cols, rows, 'No challenges to track.') });
+  }
   function renderPanel() {
     if (!active) return renderEmpty();
     var html = '';
-    if (role === 'student' && active === 'solve') html = studentSolve();
+    if (role === 'student' && active === 'submit') html = restrictionPanel('Submit', 'Students cannot submit challenges.');
+    else if (role === 'representative' && active === 'solve') html = restrictionPanel('Solve', 'Representatives cannot solve or allocate challenges.');
+    else if (role === 'student' && active === 'solve') html = studentSolve();
     else if (role === 'representative' && active === 'submit') html = repSubmit();
-    else if (role === 'representative' && active === 'solve') html = repSolve();
+    else if (role === 'representative' && active === 'track') html = trackPanel();
+    else if (role === 'student' && active === 'track') html = trackPanel();
     else if (role === 'supervisor' && active === 'submit') html = supSubmit();
-    else if (role === 'supervisor' && active === 'assign') html = supAssign();
-    else if (role === 'supervisor' && active === 'review') html = supReview();
-    else if (role === 'supervisor' && active === 'verify') html = supVerify();
+    else if (role === 'supervisor' && active === 'solve') html = '<div class="ws-sec-title">Assign and review work</div>' + supAssign() + supReview() + supVerify();
+    else if (role === 'supervisor' && active === 'track') html = trackPanel();
     else if (role === 'admin' && active === 'approvals') html = adminApprovals();
     else if (active === 'meetings') html = meetingsPanel();
     document.getElementById('content').innerHTML = html;
