@@ -1,0 +1,5 @@
+Flask>=3.0
+# Optional, for production serving on Linux:
+# gunicorn>=22.0
+# For running the tests:
+# pytest>=8.0

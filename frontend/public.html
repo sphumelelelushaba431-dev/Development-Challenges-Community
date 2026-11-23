@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overview dashboard — Development Challenges Community</title>
+  <script>try { if (localStorage.getItem('dcc-theme') === 'dark') document.documentElement.classList.add('dark'); } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="icon" href="images/favicon.svg" type="image/svg+xml">
+</head>
+<body class="dash-fit bg-slate-50 text-slate-900 dark:bg-[#0b1220] dark:text-slate-100">
+  <a href="#content" class="sr-only z-[100] rounded-md bg-brand-800 px-3 py-2 text-sm font-semibold text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Skip to main content</a>
+  <div class="flex h-screen flex-col">
+    <header class="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 lg:px-5 dark:border-[#1f2a44] dark:bg-[#0f1729]">
+      <a href="index.html" class="rounded-md text-[15px] font-medium text-slate-900 no-underline dark:text-slate-100" title="Back to Home">Overview dashboard</a>
+
+      <label class="relative ml-auto hidden w-60 md:block lg:w-64">
+        <span class="sr-only">Search</span>
+        <svg class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="search" type="search" placeholder="Search anything..." class="w-full rounded-lg border border-slate-200 bg-slate-100 py-2 pr-12 pl-9 text-[13.5px] text-slate-800 placeholder:text-slate-500 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-500/15 focus:outline-none dark:border-[#24314f] dark:bg-[#16213a] dark:text-slate-100 dark:placeholder:text-slate-400 dark:focus:bg-[#16213a]">
+        <kbd id="kbd" class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans text-[11px] text-slate-500 dark:border-[#2a3858] dark:bg-[#0f1729] dark:text-slate-400">⌘ K</kbd>
+      </label>
+
+      <div id="range-slot"></div>
+
+      <button id="theme" aria-label="Switch to dark mode" aria-pressed="false" class="inline-flex size-9 cursor-pointer items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#16213a]">
+        <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="theme-icon" d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+      </button>
+      <button id="bell" aria-label="Notifications" class="relative inline-flex size-9 cursor-pointer items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#16213a]">
+        <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <span id="bell-count" class="absolute top-1.5 right-1.5 size-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#0f1729]"></span>
+      </button>
+      <a href="login.html" class="rounded-lg border border-brand-600 px-4 py-2 text-[14px] font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-400 dark:text-brand-300 dark:hover:bg-[#16213a]">Login</a>
+      <a href="membership-consent.html" class="rounded-lg border border-brand-600 px-4 py-2 text-[14px] font-semibold text-brand-700 hover:bg-brand-50 dark:border-brand-400 dark:text-brand-300 dark:hover:bg-[#16213a]">Registration</a>
+    </header>
+
+    <main id="content" tabindex="-1" class="dash-main flex min-h-0 flex-1 flex-col gap-4 px-4 pt-4 pb-4 focus:outline-none lg:px-5"></main>
+  </div>
+  <div id="toast" role="status" class="pointer-events-none fixed right-5 bottom-5 z-[80] max-w-sm translate-y-2 rounded-lg bg-brand-950 px-4 py-3 text-sm text-white opacity-0 shadow-lg transition"></div>
+  <div id="modal-root"></div>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/public.js"></script>
+</body>
+</html>

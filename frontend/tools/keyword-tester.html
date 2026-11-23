@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Keyword extraction tester (developers only)</title>
+  <style>
+    body { font-family: Inter, system-ui, Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 960px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 22px; margin: 0 0 4px; } p.note { color: #64748b; margin: 0 0 16px; font-size: 14px; }
+    label { display: block; font-weight: 600; font-size: 14px; margin: 12px 0 4px; }
+    input, textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font: inherit; }
+    button { margin-top: 12px; background: #1e40af; color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; font-weight: 600; cursor: pointer; }
+    section { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-top: 16px; }
+    h2 { font-size: 16px; margin: 0 0 8px; }
+    .chips span { display: inline-block; margin: 0 6px 6px 0; padding: 3px 9px; border-radius: 999px; background: #eef2ff; font-size: 13px; }
+    .chips span.phrase { background: #dcfce7; } .chips b { color: #475569; font-weight: 600; margin-left: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; } td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #f1f5f9; }
+    ol { margin: 0; padding-left: 20px; font-size: 14px; color: #334155; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Keyword extraction tester</h1>
+  <p class="note">For developers only — not linked from the system. Type a challenge as a representative would and see the keywords, the Area of Interest and the matching steps.</p>
+  <label for="t">Challenge title</label><input id="t" value="Reduce queues at the campus clinic">
+  <label for="d">Description</label><textarea id="d" rows="4">Patients wait hours at the campus clinic without updates; nurses want a calmer waiting room and SMS alerts when it is their turn.</textarea>
+  <button id="go" type="button">Extract</button>
+  <section><h2>Keywords (green = known domain phrase)</h2><div id="kw" class="chips"></div></section>
+  <section><h2>Areas of Interest</h2><table><thead><tr><th>Area</th><th>Score</th><th>Matched on</th></tr></thead><tbody id="areas"></tbody></table></section>
+  <section><h2>Steps</h2><ol id="trace"></ol></section>
+</main>
+<script src="../js/keywords.js"></script>
+<script src="../js/matching.js"></script>
+<script>
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function go() {
+    var t = document.getElementById('t').value, d = document.getElementById('d').value;
+    var K = Keywords.extract(d, t), m = Matching.matchInterests({ title: t, desc: d });
+    document.getElementById('kw').innerHTML = K.keywords.slice(0, 20).map(function (k) { return '<span class="' + (k.kind === 'phrase' ? 'phrase' : '') + '">' + esc(k.term) + '<b>' + k.weight + '</b></span>'; }).join('');
+    document.getElementById('areas').innerHTML = m.interests.sort(function (a, b) { return b.score - a.score; }).map(function (i) { return '<tr><td>' + esc(i.interest) + '</td><td>' + i.score.toFixed(2) + '</td><td>' + esc(i.via.join(', ')) + '</td></tr>'; }).join('') || '<tr><td colspan="3">No suitable interest match — the challenge is flagged for the supervisor.</td></tr>';
+    document.getElementById('trace').innerHTML = m.trace.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
+  }
+  document.getElementById('go').addEventListener('click', go); go();
+</script>
+</body>
+</html>

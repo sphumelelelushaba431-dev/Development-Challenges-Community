@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Member Registration — Development Challenges Community</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="icon" href="images/favicon.svg" type="image/svg+xml">
+</head>
+<body class="fit-screen flex min-h-screen flex-col">
+
+  <header class="shrink-0 border-b border-slate-200 bg-white">
+    <div class="flex h-14 w-full items-center gap-4 pl-4 pr-2">
+      <a href="index.html" class="flex items-center gap-3 no-underline">
+        <span class="font-display text-lg font-bold text-brand-950">Membership Registration</span>
+      </a>
+      <nav class="ml-auto flex items-center gap-1 text-sm" aria-label="Main">
+        <a href="index.html" class="rounded-full px-4 py-1.5 font-medium text-slate-600 hover:bg-slate-100">Home</a>
+        <a href="login.html" class="rounded-full px-4 py-1.5 font-medium text-slate-600 hover:bg-slate-100">Login</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="fit-main mx-auto flex w-full max-w-4xl flex-1 flex-col justify-start px-4 pt-4 pb-3">
+    <div id="reg-alert" role="alert" hidden class="fixed top-16 left-1/2 z-50 w-[min(92vw,560px)] -translate-x-1/2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 shadow-lg"></div>
+    <div id="reg-ok" role="status" hidden class="fixed top-16 left-1/2 z-50 w-[min(92vw,560px)] -translate-x-1/2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-800 shadow-lg"></div>
+
+    <!-- Membership registration form -->
+    <form id="reg-form" action="/register" method="post" enctype="multipart/form-data" novalidate
+          class="card fit-card flex flex-col px-5 pt-4 shadow-lg shadow-brand-950/5 sm:px-7">
+      <input type="hidden" name="terms_accepted" id="terms-val" value="">
+      <input type="hidden" name="popia_consent" id="popia-val" value="">
+
+      <div class="flex flex-col">
+      <h2 class="sec">Account Details</h2>
+      <div class="grid grid-cols-1 gap-x-5 sm:grid-cols-3">
+        <div class="fld">
+          <label for="role" class="label">Role <span class="text-red-600">*</span></label>
+          <select id="role" name="role" class="input" required>
+            <option value="">Select role</option>
+            <option value="student">Student</option>
+            <option value="representative">Representative</option>
+            <option value="supervisor">Supervisor</option>
+          </select>
+          <span class="err" id="role-err"></span>
+        </div>
+        <fieldset class="fld" id="interest-field">
+          <legend class="label">Area of Interest <span class="text-red-600">*</span></legend>
+          <details id="interest" class="input relative p-0" aria-describedby="interest-err">
+            <summary id="interest-summary" class="cursor-pointer list-none px-3 py-2">Select up to 3 areas</summary>
+            <div class="grid grid-cols-1 gap-2 border-t border-slate-200 p-3" role="group">
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Software &amp; Web Development"> Software &amp; Web Development</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Data Science &amp; Machine Learning"> Data Science &amp; Machine Learning</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Internet of Things &amp; Embedded Systems"> Internet of Things &amp; Embedded Systems</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Environmental Systems &amp; Water"> Environmental Systems &amp; Water</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Renewable Energy &amp; Sustainability"> Renewable Energy &amp; Sustainability</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Health &amp; Community Wellbeing"> Health &amp; Community Wellbeing</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Education &amp; Skills Development"> Education &amp; Skills Development</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Entrepreneurship &amp; Small Business Support"> Entrepreneurship &amp; Small Business Support</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Design, Media &amp; Communication"> Design, Media &amp; Communication</label>
+              <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="area_of_interest" value="Research"> Research</label>
+            </div>
+          </details>
+          <span class="err" id="interest-err"></span>
+        </fieldset>
+        <div class="fld">
+          <label for="organisation" class="label">Organisation <span class="text-red-600">*</span></label>
+          <input id="organisation" name="organisation" type="text" class="input" autocomplete="organization" maxlength="120" placeholder="e.g. University of Zululand" required>
+          <span class="err" id="organisation-err"></span>
+        </div>
+      </div>
+
+      <h2 class="sec">Personal Details</h2>
+      <div class="grid grid-cols-1 gap-x-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="fld">
+          <label for="title" class="label">Title <span class="text-red-600">*</span></label>
+          <select id="title" name="title" class="input" required>
+            <option value="">Select title</option><option>Mr</option><option>Miss</option><option>Ms</option><option>Mrs</option><option>Dr</option><option>Prof</option>
+          </select>
+          <span class="err" id="title-err"></span>
+        </div>
+        <div class="fld">
+          <label for="gender" class="label">Gender <span class="text-red-600">*</span></label>
+          <select id="gender" name="gender" class="input" required>
+            <option value="">Select gender</option><option>Male</option><option>Female</option>
+          </select>
+          <span class="err" id="gender-err"></span>
+        </div>
+        <div class="fld">
+          <label for="first-name" class="label">First Name <span class="text-red-600">*</span></label>
+          <input id="first-name" name="first_name" class="input" placeholder="Enter first name" autocomplete="given-name">
+          <span class="err" id="first-name-err"></span>
+        </div>
+        <div class="fld">
+          <label for="surname" class="label">Surname <span class="text-red-600">*</span></label>
+          <input id="surname" name="surname" class="input" placeholder="Enter surname" autocomplete="family-name">
+          <span class="err" id="surname-err"></span>
+        </div>
+        <div class="fld">
+          <label for="id-number" class="label">ID Number <span class="text-red-600">*</span></label>
+          <input id="id-number" name="id_number" class="input" placeholder="13-digit SA ID number" inputmode="numeric" maxlength="13">
+          <span class="err" id="id-number-err"></span>
+        </div>
+        <div class="fld">
+          <label for="phone" class="label">Phone Number <span class="text-red-600">*</span></label>
+          <input id="phone" name="phone" type="tel" class="input" placeholder="e.g. 071 234 5678" autocomplete="tel">
+          <span class="err" id="phone-err"></span>
+        </div>
+        <div class="fld lg:col-span-2">
+          <label for="email" class="label">Email Address <span class="text-red-600">*</span></label>
+          <input id="email" name="email" type="email" class="input" placeholder="name@example.com" autocomplete="email">
+          <span class="err" id="email-err"></span>
+        </div>
+        <div class="fld sm:col-span-2">
+          <label for="address" class="label">Physical Address <span class="text-red-600">*</span></label>
+          <input id="address" name="address" class="input" placeholder="Street, suburb, city, postal code" autocomplete="street-address">
+          <span class="err" id="address-err"></span>
+        </div>
+        <div class="fld sm:col-span-2">
+          <span class="label">Profile Photo</span>
+          <div class="flex h-[38px] items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3">
+            <img id="photo-preview" alt="Selected profile photo" class="hidden size-7 shrink-0 rounded-full object-cover">
+            <svg id="photo-icon" class="size-4.5 shrink-0 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <span class="min-w-0 flex-1"></span>
+            <label for="photo" class="cursor-pointer rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold hover:bg-slate-100">Choose photo</label>
+            <input id="photo" name="photo" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" class="sr-only">
+          </div>
+          <span class="err" id="photo-err"></span>
+        </div>
+      </div>
+
+      <h2 class="sec">Security</h2>
+      <div class="grid grid-cols-1 gap-x-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="fld">
+          <label for="password" class="label">Password <span class="text-red-600">*</span></label>
+          <div class="relative">
+            <input id="password" name="password" type="password" class="input pr-10" autocomplete="new-password">
+            <button type="button" data-toggle="password" aria-label="Show password" class="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-md p-1.5 text-slate-500 hover:bg-slate-100"></button>
+          </div>
+          <span class="err" id="password-err"></span>
+        </div>
+        <div class="fld">
+          <label for="confirm" class="label">Confirm Password <span class="text-red-600">*</span></label>
+          <div class="relative">
+            <input id="confirm" name="confirm_password" type="password" class="input pr-10" autocomplete="new-password">
+            <button type="button" data-toggle="confirm" aria-label="Show password" class="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-md p-1.5 text-slate-500 hover:bg-slate-100"></button>
+          </div>
+          <span class="err" id="confirm-err"></span>
+        </div>
+      </div>
+
+
+      </div>
+      <div class="-mx-5 mt-auto flex justify-between gap-3 border-t border-slate-200 px-5 py-3 sm:-mx-7 sm:px-7">
+        <button type="button" id="back" class="btn py-2">Back</button>
+        <button type="submit" class="btn btn-primary px-6 py-2">Register</button>
+      </div>
+    </form>
+  </main>
+
+  <footer class="shrink-0 bg-brand-950 text-sm text-blue-100">
+    <div class="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-between gap-4 px-5 py-3">
+      <span>© 2026 Development Challenges Community</span>
+      <nav class="flex gap-5" aria-label="Legal">
+        <a href="privacy.html" class="font-semibold text-white underline decoration-blue-400 underline-offset-4">Privacy Policy (POPIA)</a>
+        <a href="terms.html" class="font-semibold text-white underline decoration-blue-400 underline-offset-4">Data Consent</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/register.js"></script>
+</body>
+</html>
