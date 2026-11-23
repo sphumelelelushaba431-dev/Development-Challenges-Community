@@ -39,9 +39,10 @@
       }).catch(function (err) { btn.disabled = false; alertMsg(err.message); });
       return;
     }
-    // Demo mode (js/config.js → demo: true): open the dashboard for the member number.
-    var HOME = { DCC00001: 'admin.html', DCC00002: 'student.html', DCC00003: 'representative.html', DCC00011: 'supervisor.html' };
-    window.location.href = HOME[id.toUpperCase()] || 'student.html';
+    // Demo mode (js/config.js → demo: true): open the workspace as the member's role.
+    var ROLE = { DCC00001: 'admin', DCC00002: 'student', DCC00003: 'representative', DCC00011: 'supervisor' };
+    try { localStorage.setItem('dcc-demo-role', ROLE[id.toUpperCase()] || 'student'); } catch (e) {}
+    window.location.href = 'workspace.html';
   });
 
   // Forgotten password

@@ -2,7 +2,7 @@
 import os
 import uuid
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request, send_from_directory
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ..auth import login_required, make_token, read_token
@@ -13,6 +13,23 @@ from ..services import full_name, log, me_payload, notify_admins
 from ..validators import EMAIL, GENDERS, MEMBER_NO, PHONE, ROLES, TITLES, clean_phone, password_problems, valid_sa_id
 
 bp = Blueprint("auth", __name__, url_prefix="/api")
+MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
+
+
+def _save_photo(upload):
+    if not upload or not upload.filename:
+        return None
+    ext = os.path.splitext(upload.filename)[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png"):
+        fail("Use a JPG or PNG photo.", 422, photo="Use a JPG or PNG photo.")
+    content = upload.stream.read(MAX_PROFILE_PHOTO_BYTES + 1)
+    if len(content) > MAX_PROFILE_PHOTO_BYTES:
+        fail("Photo must be 2 MB or smaller.", 422, photo="Photo must be 2 MB or smaller.")
+    os.makedirs(current_app.config["UPLOAD_FOLDER"], exist_ok=True)
+    photo = "photo-" + uuid.uuid4().hex + ext
+    with open(os.path.join(current_app.config["UPLOAD_FOLDER"], photo), "wb") as saved:
+        saved.write(content)
+    return photo
 
 
 def _data():
@@ -98,15 +115,7 @@ def register():
     if errors:
         fail("Please correct the highlighted fields.", 422, **errors)
 
-    photo = None
-    f = request.files.get("photo")
-    if f and f.filename:
-        ext = os.path.splitext(f.filename)[1].lower()
-        if ext not in (".jpg", ".jpeg", ".png"):
-            fail("Use a JPG or PNG photo.", 422, photo="Use a JPG or PNG photo.")
-        os.makedirs(current_app.config["UPLOAD_FOLDER"], exist_ok=True)
-        photo = "photo-" + uuid.uuid4().hex + ext
-        f.save(os.path.join(current_app.config["UPLOAD_FOLDER"], photo))
+    photo = _save_photo(request.files.get("photo"))
 
     member_no = _next_member_no()
     execute("""INSERT INTO users (member_no, role, title, first_name, surname, gender, id_number, phone, email, organisation, interest,
@@ -147,7 +156,7 @@ def login():
     if u["status"] == "rejected":
         fail("Your registration was not approved. Contact the administrator.", 403)
     execute("UPDATE users SET failed_logins = 0 WHERE id = ?", (u["id"],))
-    home = {"student": "student.html", "supervisor": "supervisor.html", "representative": "representative.html", "admin": "admin.html"}[u["role"]]
+    home = "workspace.html"   # one role-gated workspace for every member
     return jsonify({"token": make_token(u), "user": me_payload(u), "home": home})
 
 
@@ -185,6 +194,11 @@ def me():
     return jsonify(me_payload(g.user))
 
 
+@bp.get("/photos/<path:filename>")
+def get_photo(filename):
+    return send_from_directory(current_app.config["UPLOAD_FOLDER"], filename)
+
+
 @bp.put("/me")
 @login_required()
 def update_me():
@@ -211,9 +225,10 @@ def update_me():
     interest = interests[0] if interests else ""
     if errors:
         fail("Please correct the highlighted fields.", 422, **errors)
-    execute("UPDATE users SET email = ?, phone = ?, organisation = ?, address = ?, interest = ?, expertise = ? WHERE id = ?",
+    photo = _save_photo(request.files.get("photo")) or g.user["photo"]
+    execute("UPDATE users SET email = ?, phone = ?, organisation = ?, address = ?, interest = ?, expertise = ?, photo = ? WHERE id = ?",
             (email, phone, (d.get("org") or d.get("organisation")).strip(), (d.get("address") or "").strip(),
-             interest, jdump(interests), g.user["id"]))
+             interest, jdump(interests), photo, g.user["id"]))
     return jsonify(me_payload(query("SELECT * FROM users WHERE id = ?", (g.user["id"],), one=True)))
 
 

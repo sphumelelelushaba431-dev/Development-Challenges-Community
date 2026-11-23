@@ -1,0 +1,112 @@
+/* Workspace layout — plain CSS so no Tailwind rebuild is needed.
+   Inner panel content reuses the compiled utilities and helpers in app.css. */
+
+/* Top action bar (role-gated buttons) */
+.ws-nav {
+  position: sticky; top: 64px; z-index: 20;
+  display: flex; align-items: center; gap: 8px;
+  overflow-x: auto; padding: 12px 24px;
+  background: #fff; border-bottom: 1px solid #e2e8f0;
+}
+.ws-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 16px; border-radius: 10px;
+  border: 1px solid #cbd5e1; background: #fff;
+  font-size: 14px; font-weight: 600; color: #334155;
+  cursor: pointer; white-space: nowrap; transition: background .15s, color .15s, border-color .15s;
+}
+.ws-btn svg { width: 18px; height: 18px; }
+.ws-btn:hover { background: #f8fafc; }
+.ws-btn.active { background: #1e3a8a; border-color: #1e3a8a; color: #fff; }
+.ws-btn.active:hover { background: #1e40af; }
+
+/* Clear workspace area */
+.ws-main {
+  width: 100%; max-width: 1200px; margin: 0 auto;
+  padding: 24px; display: flex; flex-direction: column; gap: 16px;
+}
+.ws-head h2 { font-family: "Plus Jakarta Sans", Inter, sans-serif; font-size: 21px; font-weight: 700; color: #0f172a; }
+.ws-head p { margin-top: 4px; font-size: 13.5px; color: #64748b; max-width: 70ch; }
+
+/* List + inline form, side by side on wide screens */
+.ws-grid { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+@media (min-width: 1024px) { .ws-grid { grid-template-columns: 1.05fr 1fr; } }
+.ws-grid.wide { grid-template-columns: 1fr; }
+@media (min-width: 1024px) { .ws-grid.wide { grid-template-columns: 1.4fr 1fr; } }
+
+/* Cards size to their content here (the dashboards' fixed-height fit is not used) */
+.ws-main .card2 { overflow: visible; }
+.ws-main .panel-b { overflow: visible; }
+
+/* Empty prompt */
+.ws-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 72px 24px; gap: 12px;
+  border: 1px dashed #cbd5e1; border-radius: 16px; background: #fff;
+}
+.ws-empty .ic { display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 16px; background: #eef2ff; color: #1e3a8a; }
+.ws-empty .ic svg { width: 28px; height: 28px; }
+.ws-empty h2 { font-family: "Plus Jakarta Sans", Inter, sans-serif; font-size: 20px; font-weight: 700; color: #0f172a; }
+.ws-empty p { font-size: 14px; color: #64748b; max-width: 46ch; }
+
+/* Inline form pieces */
+.ws-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.ws-note { border-radius: 10px; background: #f8fafc; padding: 10px 12px; font-size: 13px; color: #475569; }
+.ws-quote { border-radius: 8px; background: #fefce8; padding: 10px 12px; font-size: 13px; color: #713f12; }
+.ws-field { margin-bottom: 14px; }
+.ws-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .ws-2col { grid-template-columns: 1fr; } }
+
+/* File input */
+.ws-file { display: block; width: 100%; font-size: 13.5px; color: #334155; }
+.ws-file::file-selector-button {
+  margin-right: 12px; cursor: pointer; border: 0; border-radius: 8px;
+  background: #eef2ff; color: #1e3a8a; padding: 7px 14px; font-weight: 600; font-size: 13px;
+}
+
+/* Selectable option tiles (funding question, lab venues) */
+.ws-opt {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;
+  font-size: 13.5px; font-weight: 600; color: #0f172a; transition: border-color .15s, background .15s;
+}
+.ws-opt input { width: 16px; height: 16px; accent-color: #1d4ed8; }
+.ws-opt:has(input:checked) { border-color: #3b5bdb; background: #eef2ff; }
+.ws-opt.disabled { cursor: not-allowed; opacity: .55; }
+.ws-venues { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 560px) { .ws-venues { grid-template-columns: repeat(2, 1fr); } }
+.ws-venue {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center;
+  border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px 6px; cursor: pointer; font-size: 13px;
+}
+.ws-venue input { position: absolute; opacity: 0; pointer-events: none; }
+.ws-venue .v { font-weight: 700; color: #0f172a; }
+.ws-venue .s { font-size: 11px; color: #64748b; }
+.ws-venue:has(input:checked) { border-color: #1e3a8a; background: #eef2ff; }
+.ws-venue:has(input:checked) .v { color: #1e3a8a; }
+.ws-venue.disabled { cursor: not-allowed; background: #f8fafc; border-color: #e2e8f0; }
+.ws-venue.disabled .v, .ws-venue.disabled .s { color: #94a3b8; }
+
+/* Ranked student list (allocation) */
+.ws-rank { max-height: 260px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+.ws-rank label { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; font-size: 13.5px; }
+.ws-rank label:last-child { border-bottom: 0; }
+.ws-rank label.disabled { cursor: not-allowed; opacity: .55; }
+.ws-rank input { accent-color: #1d4ed8; }
+.ws-rec { margin-left: 6px; border-radius: 4px; background: #1e3a8a; color: #fff; padding: 1px 6px; font-size: 10px; font-weight: 700; letter-spacing: .02em; }
+
+/* Detail rows */
+.ws-dl { font-size: 13px; }
+.ws-dl > div { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
+.ws-dl > div:last-child { border-bottom: 0; }
+.ws-dl dt { width: 110px; flex-shrink: 0; color: #64748b; }
+.ws-dl dd { min-width: 0; font-weight: 500; color: #1e293b; word-break: break-word; }
+
+/* Meeting list row */
+.ws-meet { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+.ws-meet:last-child { border-bottom: 0; }
+.ws-meet .lab { width: 92px; flex-shrink: 0; text-align: center; border-radius: 8px; background: #eef2ff; color: #1e3a8a; padding: 5px 0; font-size: 12px; font-weight: 700; box-shadow: inset 0 0 0 1px #c7d2fe; }
+
+/* Small helper text */
+.ws-hint { font-size: 12px; color: #94a3b8; font-weight: 400; }
+.ws-sec-title { font-size: 13px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: #64748b; margin: 4px 0 8px; }
