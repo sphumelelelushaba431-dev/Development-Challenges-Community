@@ -19,11 +19,11 @@ Code: `js/keywords.js` (keyword extraction) and `js/matching.js` (areas and rank
 
 All weights and thresholds are in `Matching.CFG`.
 
-**Who gets assigned:** the matching assigns each new challenge to the best-matching **supervisor** (supervisors register their areas of expertise like students register interests). The supervisor then **adds students** to the challenge from the dashboard; students whose interests fit are shown as *Suggested*. If no supervisor meets the threshold, the challenge is flagged for review by a coordinating supervisor or administrator.
+**Who gets assigned:** the matching assigns each new challenge to the best-matching **supervisor** (supervisors register their areas of expertise like students register interests). The supervisor then **adds students** to the challenge from the dashboard; students whose interests fit are shown as *Suggested*. If no supervisor meets the threshold, the challenge is flagged for review by the supervisors.
 
 ## Supervisor capacity
 
-A supervisor holds **at most 5 open challenges** at a time (waiting for students, in progress, or waiting for verification) — `Matching.CFG.supervisorCap`. When the matching assigns a new challenge, supervisors who already have 5 are skipped; if every suitable supervisor is full, the challenge waits for a coordinator or administrator. On the Supervisor dashboard the first 3 challenges are listed and **View more** opens the rest.
+A supervisor holds **at most 5 open challenges** at a time (waiting for students, in progress, or waiting for verification) — `Matching.CFG.supervisorCap`. When the matching assigns a new challenge, supervisors who already have 5 are skipped; if every suitable supervisor is full, the challenge stays unallocated for the supervisors to review.
 
 ## Submitting a challenge (no category)
 

@@ -5,20 +5,15 @@ __pycache__/
 .venv/
 venv/
 
-# Local data and uploads
-instance/
+# Local runtime data
+backend/instance/
 *.sqlite3
 *.db
 
-# Environment / secrets
+# Environment and editor files
 .env
 .env.*
-
-# Node
-node_modules/
-
-# Editors / OS
-.vscode/
-.idea/
-Thumbs.db
 .DS_Store
+
+# Frontend build dependencies
+node_modules/

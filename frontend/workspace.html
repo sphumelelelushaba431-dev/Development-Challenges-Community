@@ -13,16 +13,14 @@
 <body>
   <a href="#content" class="sr-only z-[100] rounded-md bg-brand-800 px-3 py-2 text-sm font-semibold text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Skip to main content</a>
   <div class="min-h-screen bg-slate-50">
-    <header class="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-5 lg:px-6">
-      <h1 id="page-title" class="min-w-0 truncate font-display text-[22px] font-bold text-brand-950">Workspace</h1>
-      <label class="relative ml-auto hidden w-80 md:block"><span class="sr-only">Search</span>
-        <input id="search" class="input border-transparent bg-slate-100 py-2.5 shadow-none" placeholder="Search challenges..."></label>
-      <button id="bell" aria-label="Notifications" class="relative inline-flex size-10 cursor-pointer items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 max-md:ml-auto">
+    <header class="ws-header sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-white">
+      <h1 id="page-title" class="ws-title min-w-0 shrink-0 truncate font-display text-[22px] font-bold text-brand-950">Workspace</h1>
+      <nav id="ws-nav" class="ws-nav" aria-label="Workspace actions"></nav>
+      <button id="bell" aria-label="Notifications" class="relative inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-slate-600 hover:bg-slate-100">
         <svg class="size-5.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <span id="bell-count" class="absolute top-1.5 right-2 size-2 rounded-full bg-red-500 ring-2 ring-white"></span></button>
-      <button id="top-avatar" aria-label="Your profile" aria-haspopup="dialog" aria-expanded="false" class="flex size-10 cursor-pointer items-center justify-center rounded-full bg-brand-100 text-[14px] font-bold text-brand-700 ring-brand-300 hover:ring-2 focus-visible:ring-2"></button>
+      <button id="top-avatar" aria-label="Your profile" aria-haspopup="dialog" aria-expanded="false" class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-brand-100 text-[14px] font-bold text-brand-700 ring-brand-300 hover:ring-2 focus-visible:ring-2"></button>
     </header>
-    <nav id="ws-nav" class="ws-nav" aria-label="Workspace actions"></nav>
     <main id="content" tabindex="-1" class="ws-main focus:outline-none"></main>
   </div>
   <div id="toast" role="status" class="pointer-events-none fixed right-5 bottom-5 z-[80] max-w-sm translate-y-2 rounded-lg bg-brand-950 px-4 py-3 text-sm text-white opacity-0 shadow-xl transition"></div>

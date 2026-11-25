@@ -33,7 +33,7 @@
 
   function shell(cfg) {
     ME = cfg;
-    document.getElementById('top-avatar').textContent = cfg.initials;
+    paintAvatar();
   }
   /* Notifications panel — opened from the bell.
      Messages are notifications too: items with kind 'message' get a Reply button.
@@ -97,6 +97,17 @@
   /* ---------- Profile panel (opened from the initials button) ---------- */
   var ME = null;
   var AREAS = ['Software & Web Development', 'Data Science & Machine Learning', 'Internet of Things & Embedded Systems', 'Environmental Systems & Water', 'Renewable Energy & Sustainability', 'Health & Community Wellbeing', 'Education & Skills Development', 'Entrepreneurship & Small Business Support', 'Design, Media & Communication', 'Research'];   // same as registration
+  function photoUrl(photo) {
+    if (!photo) return '';
+    if (/^data:image\//.test(photo)) return photo;
+    return (window.API && API.base ? API.base : '') + '/photos/' + encodeURIComponent(photo);
+  }
+  function paintAvatar() {
+    var avatar = document.getElementById('top-avatar'), photo = ME && ME.profile && ME.profile.photo;
+    if (!avatar) return;
+    if (photo) avatar.innerHTML = '<img src="' + esc(photoUrl(photo)) + '" alt="" class="size-full rounded-full object-cover">';
+    else avatar.textContent = ME.initials;
+  }
   function logout() {
     modal('Log out', '<p>Are you sure you want to log out of Development Challenges Community?</p>', [{ label: 'Cancel' }, { label: 'Log out', primary: true, onClick: function () { if (window.API && API.on()) return API.logout(); try { sessionStorage.clear(); } catch (e) {} location.href = 'login.html'; } }]);
   }
@@ -108,7 +119,7 @@
     box.className = 'fixed top-16 right-3 z-[60] w-[min(400px,calc(100vw-24px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl';
     var row = function (k, v) { return v ? '<div class="flex gap-3 py-1.5"><dt class="w-24 shrink-0 text-slate-500">' + k + '</dt><dd class="min-w-0 font-medium break-words text-slate-800">' + esc(v) + '</dd></div>' : ''; };
     box.innerHTML =
-      '<div class="flex items-center gap-3 bg-brand-950 px-4 py-4"><span class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-[16px] font-bold text-white ring-2 ring-white/20">' + (p.photo ? '<img src="' + p.photo + '" alt="" class="size-full object-cover">' : esc(ME.initials)) + '</span>' +
+      '<div class="flex items-center gap-3 bg-brand-950 px-4 py-4"><span class="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-600 text-[16px] font-bold text-white ring-2 ring-white/20">' + (p.photo ? '<img src="' + esc(photoUrl(p.photo)) + '" alt="" class="size-full object-cover">' : esc(ME.initials)) + '</span>' +
         '<div class="min-w-0 flex-1"><div class="truncate text-[15px] font-semibold text-white">' + esc(ME.name) + '</div><div class="truncate text-[12px] text-blue-200">' + esc(ME.roleLabel) + (p.id ? ' · ' + esc(p.id) : '') + '</div></div>' +
         '<button data-prof="settings" aria-label="Settings" title="Settings" class="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-blue-200 hover:bg-white/10 hover:text-white">' + icon('cog', 'size-5') + '</button></div>' +
       '<dl class="divide-y divide-slate-100 px-4 py-1.5 text-[13px]">' + row('Email', p.email) + row('Phone', p.phone) + row('Organisation', p.org) + row('Interest', p.interest) + row('Address', p.address) + row('Member since', p.joined ? fmt(new Date(p.joined)) : '') + '</dl>' +
@@ -122,7 +133,7 @@
     var p = ME.profile || {}, f = function (id, label, val, type, extra) { return '<div><label for="pf-' + id + '" class="label">' + label + '</label><input id="pf-' + id + '" type="' + (type || 'text') + '" value="' + esc(val || '') + '" class="input py-2" ' + (extra || '') + '><span id="pf-' + id + '-err" class="err"></span></div>'; };
     modal('Update information',
       '<div class="grid grid-cols-2 gap-x-4 gap-y-2.5">' +
-        '<div class="col-span-2 flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2"><span class="flex size-9 items-center justify-center rounded-full bg-brand-100 text-[13px] font-bold text-brand-700">' + esc(ME.initials) + '</span><div class="min-w-0 flex-1"><div class="truncate font-semibold">' + esc(ME.name) + '</div><div class="text-xs text-slate-500">' + esc(ME.roleLabel) + (p.id ? ' · ' + esc(p.id) : '') + ' · name and ID can only be changed by an administrator</div></div></div>' +
+        '<div class="col-span-2 flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2"><span class="flex size-9 items-center justify-center rounded-full bg-brand-100 text-[13px] font-bold text-brand-700">' + esc(ME.initials) + '</span><div class="min-w-0 flex-1"><div class="truncate font-semibold">' + esc(ME.name) + '</div><div class="text-xs text-slate-500">' + esc(ME.roleLabel) + (p.id ? ' · ' + esc(p.id) : '') + ' · name and ID cannot be changed here</div></div></div>' +
         f('email', 'Email address <span class="text-red-600">*</span>', p.email, 'email', 'autocomplete="email"') +
         f('phone', 'Phone number <span class="text-red-600">*</span>', p.phone, 'tel', 'autocomplete="tel"') +
         f('org', 'Organisation <span class="text-red-600">*</span>', p.org, 'text', 'autocomplete="organization"') +
@@ -141,17 +152,21 @@
         if (file && (file.size > 2 * 1048576 || !/image\/(jpeg|png)/.test(file.type))) bad('photo', 'Use a JPG or PNG under 2 MB.');
         if (!ok) return false;
         if (window.API && API.on()) {
-          var body = { email: v('email'), phone: v('phone'), org: v('org'), address: v('address') };
-          if (document.getElementById('pf-interest')) body.interest = document.getElementById('pf-interest').value;
-          API.put('/me', body).then(function (u) { ME.profile = u.profile; API.session(API.token(), u); toast('Your information has been updated.', 'ok'); }).catch(API.fail);
+          var body = new FormData();
+          body.append('email', v('email'));
+          body.append('phone', v('phone'));
+          body.append('org', v('org'));
+          body.append('address', v('address'));
+          if (document.getElementById('pf-interest')) body.append('interest', document.getElementById('pf-interest').value);
+          if (file) body.append('photo', file);
+          API.put('/me', body).then(function (u) { ME.profile = u.profile; API.session(API.token(), u); paintAvatar(); toast('Your information has been updated.', 'ok'); }).catch(API.fail);
           return;
         }
         p.email = v('email'); p.phone = v('phone'); p.org = v('org'); p.address = v('address');
         if (document.getElementById('pf-interest')) p.interest = document.getElementById('pf-interest').value;
         ME.profile = p;
         var done = function () { toast('Your information has been updated.', 'ok'); };
-        if (file) { var r = new FileReader(); r.onload = function () { p.photo = r.result; var a = document.getElementById('top-avatar'); a.innerHTML = '<img src="' + r.result + '" alt="" class="size-full rounded-full object-cover">'; done(); }; r.readAsDataURL(file); } else done();
-        // Send to your API here, e.g. fetch('/api/profile', { method: 'PUT', body: … })
+        if (file) { var r = new FileReader(); r.onload = function () { p.photo = r.result; paintAvatar(); done(); }; r.readAsDataURL(file); } else done();
       } }]);
   }
   var PREFS = { email: true, alloc: true, msgs: true, remind: '7' };
@@ -200,7 +215,7 @@
   }, true);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.getElementById('profile-pop')) { closeProfile(); document.getElementById('top-avatar').focus(); } });
 
-  /* ---------- Meetings (all physical, in the DC labs) ---------- */
+  /* ---------- Meetings (Online or In person) ---------- */
   var VENUES = ['Lab DC-001', 'Lab DC-002', 'Lab DC-003', 'Lab DC-004'];
   var toMin = function (hhmm) { var p = hhmm.split(':'); return +p[0] * 60 + +p[1]; };
   var hhmm = function (m) { return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + m % 60).slice(-2); };
@@ -216,7 +231,7 @@
       '<h4 class="text-[16px] font-bold text-brand-950">' + esc(m.title) + '</h4>' + (m.challenge ? '<p class="text-[13px] text-slate-500">' + esc(m.challenge) + '</p>' : '') +
       '<dl class="mt-3 divide-y divide-slate-100 text-[13px]">' +
         row('When', esc(meetWhen(m))) +
-        row('Venue', '<span class="rounded-md bg-brand-50 px-2 py-0.5 font-semibold text-brand-800 ring-1 ring-brand-200">' + esc(m.venue) + '</span> <span class="text-slate-500">· in person</span>') +
+        row('Mode', '<span class="rounded-md bg-brand-50 px-2 py-0.5 font-semibold text-brand-800 ring-1 ring-brand-200">' + esc(m.mode || m.venue || '') + '</span>') +
         row('Organiser', esc(m.organiser)) + row('Invited', esc(m.people.join(', '))) + (m.agenda ? row('Agenda', esc(m.agenda)) : '') +
       '</dl>', [{ label: 'Close' }]);
   }

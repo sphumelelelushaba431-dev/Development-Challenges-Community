@@ -45,7 +45,7 @@ def current_user():
 
 
 def login_required(*roles):
-    """@login_required() for any signed-in member, or @login_required('supervisor', 'admin')."""
+    """@login_required() for any signed-in member, or @login_required('supervisor', 'representative')."""
     def deco(fn):
         @wraps(fn)
         def wrapper(*a, **kw):

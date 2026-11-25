@@ -43,6 +43,9 @@
     });
   });
   $('role').addEventListener('change', function () { setErr('role', ''); });
+  $('back').addEventListener('click', function () {
+    window.location.href = 'membership-consent.html';
+  });
   var interestBoxes = Array.prototype.slice.call(document.querySelectorAll('input[name="area_of_interest"]'));
   function updateInterestSummary() {
     var selected = interestBoxes.filter(function (item) { return item.checked; });
@@ -100,7 +103,7 @@
     e.preventDefault();
     $('reg-alert').hidden = true; $('reg-ok').hidden = true;
     var ok = true, role = val('role'), pw = $('password').value;
-    ok &= setErr('role', !role ? 'Select a role.' : '');
+    ok &= setErr('role', ['student', 'representative', 'supervisor'].indexOf(role) < 0 ? 'Select Student, Representative or Supervisor.' : '');
     ok &= setErr('title', !val('title') ? 'Select a title.' : '');
     ok &= setErr('gender', !val('gender') ? 'Select a gender option.' : '');
     ok &= setErr('first-name', val('first-name').length < 2 ? 'Enter your first name.' : '');
@@ -136,10 +139,7 @@
       });
       return;
     }
-    var approval = role === 'supervisor';
-    $('reg-ok').textContent = approval
-      ? 'Registration received. An administrator will review your account; you can log in once it is approved.'
-      : 'Registration received. Your Member ID will be emailed to ' + val('email') + '. You can then log in.';
+    $('reg-ok').textContent = 'Demo registration received. Nothing is saved until demo mode is switched off (js/config.js → demo: false).';
     $('reg-ok').hidden = false; setTimeout(function () { $('reg-ok').hidden = true; }, 6000);
   });
 })();

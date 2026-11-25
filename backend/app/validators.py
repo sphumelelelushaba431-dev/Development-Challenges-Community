@@ -8,7 +8,6 @@ MEMBER_NO = re.compile(r"^DCC\d{5}$", re.I)
 TITLES = {"Mr", "Miss", "Ms", "Mrs", "Dr", "Prof"}
 GENDERS = {"Male", "Female"}
 ROLES = {"student", "supervisor", "representative"}
-PRIORITIES = {"Low", "Medium", "High", "Critical"}
 
 
 def clean_phone(p):

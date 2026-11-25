@@ -133,7 +133,7 @@
       supervisor: best ? best.supervisor : null,
       areas: m.interests.slice().sort(function (a, b) { return b.score - a.score; }).map(function (i) { return i.interest; }),
       keywords: m.keywords,
-      outcome: best ? 'assigned' : 'flagged',   // flagged → a coordinator or administrator assigns it
+      outcome: best ? 'assigned' : 'flagged',   // flagged → the supervisors review it
       ranked: ranked, match: m
     };
   }

@@ -6,6 +6,20 @@
   var EYE_OFF = '<svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22"/></svg>';
   var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   var MEMBER_ID = /^DCC\d{5}$/i;
+  // Demo mode only: the seeded accounts and the role saved on each one. Live mode reads the role from /api/auth/login.
+  var DEMO = {
+    DCC00001: 'supervisor', DCC00002: 'student', DCC00003: 'representative', DCC00004: 'student',
+    DCC00005: 'student', DCC00006: 'student', DCC00007: 'student', DCC00008: 'representative',
+    DCC00009: 'representative', DCC00010: 'representative', DCC00011: 'supervisor', DCC00012: 'supervisor',
+    DCC00013: 'supervisor', DCC00014: 'supervisor', DCC00015: 'supervisor', DCC00016: 'supervisor'
+  };
+  var DEMO_EMAILS = {
+    'admin@devchallenges.community': 'supervisor', 'amahle.mthembu@unizulu.ac.za': 'student', 'sbongokuhle@betmedia.co.za': 'representative',
+    'lwazi.dube@unizulu.ac.za': 'student', 'thando.khumalo@unizulu.ac.za': 'student', 'ayanda.zulu@mut.ac.za': 'student',
+    'nosipho.cele@unizulu.ac.za': 'student', 'sizwe@umhlathuze.gov.za': 'representative', 'palesa@rbct.org.za': 'representative',
+    'kagiso@unizulu.ac.za': 'representative', 's.ndlovu@unizulu.ac.za': 'supervisor', 'a.pillay@unizulu.ac.za': 'supervisor',
+    'l.mabaso@unizulu.ac.za': 'supervisor', 't.shezi@mut.ac.za': 'supervisor', 'k.naidoo@unizulu.ac.za': 'supervisor', 'bongani@betmedia.co.za': 'supervisor'
+  };
   var $ = function (id) { return document.getElementById(id); };
 
   function setErr(id, msg) {
@@ -35,13 +49,19 @@
     if (window.API && API.on()) {
       var btn = this.querySelector('[type=submit]'); btn.disabled = true;
       API.post('/auth/login', { member_id: id, password: $('password').value }).then(function (r) {
-        API.session(r.token, r.user); window.location.href = r.home;
+        API.session(r.token, r.user); window.location.href = r.home || 'workspace.html';
       }).catch(function (err) { btn.disabled = false; alertMsg(err.message); });
       return;
     }
-    // Demo mode (js/config.js → demo: true): open the workspace as the member's role.
-    var ROLE = { DCC00001: 'admin', DCC00002: 'student', DCC00003: 'representative', DCC00011: 'supervisor' };
-    try { localStorage.setItem('dcc-demo-role', ROLE[id.toUpperCase()] || 'student'); } catch (e) {}
+    // Demo mode: check the seeded credentials, then save the role that came with that account.
+    var key = id.toUpperCase(), role = DEMO[key] || DEMO_EMAILS[id.toLowerCase()];
+    if (!role || $('password').value !== 'Demo@1234') {
+      alertMsg('The Member ID or password is incorrect.'); return;
+    }
+    try {
+      localStorage.setItem('dcc-demo-role', role);
+      localStorage.removeItem('dcc-demo-token');
+    } catch (e) {}
     window.location.href = 'workspace.html';
   });
 

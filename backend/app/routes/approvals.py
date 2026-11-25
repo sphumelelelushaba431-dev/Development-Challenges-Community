@@ -1,4 +1,8 @@
-"""Administrator: account approvals, locked accounts, members and activity."""
+"""Account approvals and locked accounts — performed by supervisors.
+
+There is no Administrator role. Supervisors approve/decline new registrations,
+unlock accounts locked after failed logins, and review recent activity.
+"""
 from flask import Blueprint, g, jsonify, request
 
 from ..auth import login_required
@@ -6,7 +10,7 @@ from ..db import execute, now, query
 from ..errors import fail
 from ..services import days_ago, full_name, log, notify
 
-bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+bp = Blueprint("approvals", __name__, url_prefix="/api/approvals")
 
 
 def _user(member_no):
@@ -22,7 +26,7 @@ def member_row(u):
 
 
 @bp.get("/users")
-@login_required("admin")
+@login_required("supervisor")
 def users():
     role, status = request.args.get("role"), request.args.get("status")
     rows = query("SELECT * FROM users ORDER BY id DESC")
@@ -30,7 +34,7 @@ def users():
 
 
 @bp.post("/users/<member_no>/approve")
-@login_required("admin")
+@login_required("supervisor")
 def approve(member_no):
     u = _user(member_no)
     if u["status"] != "pending":
@@ -42,7 +46,7 @@ def approve(member_no):
 
 
 @bp.post("/users/<member_no>/reject")
-@login_required("admin")
+@login_required("supervisor")
 def reject(member_no):
     u = _user(member_no)
     reason = ((request.get_json(silent=True) or {}).get("reason") or "").strip()
@@ -54,7 +58,7 @@ def reject(member_no):
 
 
 @bp.post("/users/<member_no>/unlock")
-@login_required("admin")
+@login_required("supervisor")
 def unlock(member_no):
     u = _user(member_no)
     if u["status"] != "locked":
@@ -65,23 +69,24 @@ def unlock(member_no):
 
 
 @bp.get("/activity")
-@login_required("admin")
+@login_required("supervisor")
 def activity():
     return jsonify([{"who": a["who"], "text": a["text"], "kind": a["kind"], "ago": days_ago(a["created_at"]), "at": a["created_at"]}
                     for a in query("SELECT * FROM activity ORDER BY id DESC LIMIT 100")])
 
 
 @bp.get("/locked")
-@login_required("admin")
+@login_required("supervisor")
 def locked():
-    return jsonify([{"id": u["member_no"], "name": full_name(u), "why": "%d failed login attempts" % u["failed_logins"], "ago": days_ago(u["locked_at"] or now())}
+    return jsonify([{"id": u["member_no"], "name": full_name(u), "why": "%d failed login attempts" % u["failed_logins"],
+                     "ago": days_ago(u["locked_at"] or now())}
                     for u in query("SELECT * FROM users WHERE status = 'locked'")])
 
 
 @bp.get("/mcda")
-@login_required("admin")
+@login_required("supervisor")
 def mcda_settings():
-    """The MCDA set-up in use: criterion weights (from AHP), consistency ratio, threshold and ranking method."""
+    """The MCDA set-up in use: AHP weights, consistency ratio, threshold and ranking method."""
     from flask import current_app
     c = current_app.config
     return jsonify({"weights": c["MCDA_WEIGHTS"], "ahp_consistency_ratio": c.get("MCDA_AHP_CR"), "threshold": c["MCDA_THRESHOLD"],

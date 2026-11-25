@@ -28,7 +28,7 @@ def workday(n):
 
 USERS = [
     # member_no, role, title, first, surname, gender, email, phone, org, areas, status, available, record, joined (days ago)
-    ("DCC00001", "admin", "Ms", "Nokuthula", "Mkhize", "Female", "admin@devchallenges.community", "0359026000", "Development Challenges Community", [], "active", 1, 0.9, 540),
+    ("DCC00001", "supervisor", "Ms", "Nokuthula", "Mkhize", "Female", "admin@devchallenges.community", "0359026000", "Development Challenges Community", ["Research", "Health & Community Wellbeing"], "active", 1, 0.9, 540),
     ("DCC00002", "student", "Ms", "Amahle", "Mthembu", "Female", "amahle.mthembu@unizulu.ac.za", "0712345678", "University of Zululand", ["Design, Media & Communication", "Data Science & Machine Learning"], "active", 1, 0.9, 280),
     ("DCC00003", "representative", "Ms", "Sbongokuhle", "Msomi", "Female", "sbongokuhle@betmedia.co.za", "0731112233", "BET Media", [], "active", 1, 0.8, 300),
     ("DCC00004", "student", "Mr", "Lwazi", "Dube", "Male", "lwazi.dube@unizulu.ac.za", "0724445566", "University of Zululand", ["Software & Web Development", "Internet of Things & Embedded Systems"], "active", 1, 0.7, 250),
@@ -52,7 +52,7 @@ USERS = [
 # title, description, submitted_by, supervisor, status, funded, due (days from now), created (days ago), team, progress, completed (days ago), summary
 CHALLENGES = [
     ("Expansion of knowledge through communication", "Design a media campaign with podcasts and posters that grows awareness of community programmes among young people.", "DCC00003", "DCC00011", "In Progress", "yes", 24, 70, ["DCC00002"], 45, None, None),
-    ("Cafeteria food-waste reduction study", "Measure plate waste in the cafeteria and test portion and menu changes that reduce food waste.", "DCC00010", "DCC00011", "Pending Verification", "yes", 3, 60, ["DCC00005"], 100, None, None),
+    ("Cafeteria food-waste reduction study", "Measure plate waste in the cafeteria and test portion and menu changes that reduce food waste.", "DCC00010", "DCC00011", "In Progress", "yes", 3, 60, ["DCC00005"], 85, None, None),
     ("Student dropout early-warning dashboard", "First-year attrition is high. Combine LMS activity, attendance and assessment data into a dashboard that flags students at risk using machine learning.", "DCC00010", "DCC00011", "Unallocated", "yes", 50, 40, [], 0, None, None),
     ("Township storytelling and publicity drive", "Local artists want help with storytelling, social media content and publicity for a township heritage festival.", "DCC00003", "DCC00011", "Unallocated", "yes", 62, 35, [], 0, None, None),
     ("Reduce queues at the campus clinic", "Patients wait hours at the campus clinic without updates; nurses want a calmer waiting room.", "DCC00009", "DCC00011", "Unallocated", "no", 29, 30, [], 0, None, None),
@@ -104,33 +104,33 @@ def seed():
                         (cid, ids[team[0]], p, "Work update %d." % (i + 1), ts(-created + 10 + 7 * i)))
 
     c = lambda t: query("SELECT id FROM challenges WHERE title = ?", (t,), one=True)["id"]
-    execute("INSERT INTO requests (challenge_id, student_id, message, created_at) VALUES (?,?,?,?)",
-            (c("Reduce queues at the campus clinic"), ids["DCC00004"], "I built an SMS reminder tool for my residence and would like to help the clinic.", ts(0)))
-    execute("INSERT INTO requests (challenge_id, student_id, message, created_at) VALUES (?,?,?,?)",
-            (c("Township storytelling and publicity drive"), ids["DCC00005"], "I have done publicity for a community festival before.", ts(-1)))
 
-    execute("INSERT INTO meetings (supervisor_id, challenge_id, title, venue, date, start, minutes, people, agenda) VALUES (?,?,?,?,?,?,?,?,?)",
-            (ids["DCC00011"], c("Expansion of knowledge through communication"), "Progress review", "Lab DC-002", workday(1), "10:00", 60,
-             jdump(["Ms Amahle Mthembu", "Ms Sbongokuhle Msomi"]), "Audience numbers and next milestones."))
-    execute("INSERT INTO meetings (supervisor_id, challenge_id, title, venue, date, start, minutes, people, agenda) VALUES (?,?,?,?,?,?,?,?,?)",
-            (ids["DCC00011"], c("Cafeteria food-waste reduction study"), "Final report walkthrough", "Lab DC-001", workday(2), "14:00", 60, jdump(["Mr Thando Khumalo"]), ""))
-    for venue, start, mins, sup in (("Lab DC-003", "09:00", 180, "DCC00012"), ("Lab DC-004", "13:00", 120, "DCC00015"), ("Lab DC-001", "10:00", 90, "DCC00014")):
-        execute("INSERT INTO meetings (supervisor_id, challenge_id, title, venue, date, start, minutes, people) VALUES (?,?,?,?,?,?,?,?)",
-                (ids[sup], c("Campus Wi-Fi dead-zone mapping"), "Booking", venue, workday(1), start, mins, "[]"))
+    def meeting(title, challenge, mode, day, start, mins, agenda=""):
+        cid = c(challenge)
+        ch = query("SELECT * FROM challenges WHERE id = ?", (cid,), one=True)
+        people, seen = [], set()
+        for uid in [x["student_id"] for x in query("SELECT student_id FROM challenge_students WHERE challenge_id = ?", (cid,))] + [ch["submitted_by"], ch["supervisor_id"]]:
+            if uid and uid not in seen:
+                seen.add(uid)
+                people.append(query("SELECT member_no FROM users WHERE id = ?", (uid,), one=True)["member_no"])
+        execute("INSERT INTO meetings (supervisor_id, challenge_id, title, venue, date, start, minutes, people, agenda) VALUES (?,?,?,?,?,?,?,?,?)",
+                (ch["supervisor_id"], cid, title, mode, day, start, mins, jdump(people), agenda))
 
-    note = lambda who, kind, sender, text, about="", ago=0: execute(
-        "INSERT INTO notifications (user_id, kind, sender, about, text, ref, created_at) VALUES (?,?,?,?,?,?,?)", (ids[who], kind, sender, text, about, about, ts(-ago)))
-    note("DCC00011", "alert", "Mr Lwazi Dube", "Requested to work on “Reduce queues at the campus clinic”. Respond in the Action queue.", codes["Reduce queues at the campus clinic"])
-    note("DCC00011", "alert", "Mr Thando Khumalo", "Final report submitted — waiting for your verification.", codes["Cafeteria food-waste reduction study"])
+    meeting("Progress review", "Expansion of knowledge through communication", "Online", workday(1), "10:00", 60, "Audience numbers and next milestones.")
+    meeting("Final walkthrough", "Cafeteria food-waste reduction study", "In person", workday(2), "14:00", 60, "")
+
+    note = lambda who, kind, sender, text, about="", ago=0, ref="": execute(
+        "INSERT INTO notifications (user_id, kind, sender, about, text, ref, created_at) VALUES (?,?,?,?,?,?,?)", (ids[who], kind, sender, text, about, ref or about, ts(-ago)))
+    note("DCC00011", "update", "Mr Thando Khumalo", "Progress on “Cafeteria food-waste reduction study” reached 85%.", codes["Cafeteria food-waste reduction study"])
     note("DCC00011", "message", "Ms Sbongokuhle Msomi", "Thank you for the update — the audience numbers will follow next week.", codes["Expansion of knowledge through communication"], 2)
-    note("DCC00002", "meeting", "Dr Sipho Ndlovu", "Meeting: Progress review · %s 10:00 · Lab DC-002 (in person)." % workday(1), codes["Expansion of knowledge through communication"])
+    note("DCC00002", "meeting", "Dr Sipho Ndlovu", "Meeting: Progress review · %s 10:00 · Online." % workday(1), codes["Expansion of knowledge through communication"], ref="M-1")
     note("DCC00002", "message", "Dr Sipho Ndlovu", "Good progress — please include audience numbers in the next update.", codes["Expansion of knowledge through communication"], 2)
     note("DCC00003", "alert", "Prof Anika Pillay", "More details needed for “Community health-literacy workshops”.", codes["Community health-literacy workshops"], 1)
     note("DCC00003", "message", "Dr Sipho Ndlovu", "The storytelling challenge is approved; we are matching students now.", codes["Township storytelling and publicity drive"], 3)
     note("DCC00001", "alert", "Dr Mandla Zungu", "New supervisor registration waiting for approval.", "DCC00021")
 
     for who, text, kind, ago in (("Dr Mandla Zungu", "registered as a Supervisor — awaiting approval.", "warn", 0),
-                                 ("Prof Kavitha Naidoo", "verified %s as completed." % codes["Campus recycling initiative"], "ok", 12),
+                                 ("Prof Kavitha Naidoo", "completed %s at 100%%." % codes["Campus recycling initiative"], "ok", 12),
                                  ("System", "3 failed login attempts for DCC00022 — account locked.", "bad", 1),
                                  ("Mr Kagiso Nkosi", "submitted %s “Automated timetable clash detection”." % codes["Automated timetable clash detection"], "info", 2)):
         execute("INSERT INTO activity (who, text, kind, created_at) VALUES (?,?,?,?)", (who, text, kind, ts(-ago)))

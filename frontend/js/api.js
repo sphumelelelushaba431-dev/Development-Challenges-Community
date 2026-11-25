@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   var C = window.DCC_CONFIG || {}, base = String(C.apiBase || '').replace(/\/$/, '');
-  var HOME = { student: 'workspace.html', supervisor: 'workspace.html', representative: 'workspace.html', admin: 'workspace.html' };
+  var HOME = { student: 'workspace.html', supervisor: 'workspace.html', representative: 'workspace.html' };
   var store = {
     get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} },

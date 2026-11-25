@@ -30,8 +30,8 @@ def create_app(config=Config, **overrides):
     db.init_app(app)
     errors.init_app(app)
 
-    from .routes import admin, auth, challenges, dashboard, meetings, notifications, requests
-    for bp in (auth.bp, challenges.bp, requests.bp, meetings.bp, notifications.bp, admin.bp, dashboard.bp):
+    from .routes import approvals, auth, challenges, dashboard, meetings, notifications
+    for bp in (auth.bp, challenges.bp, meetings.bp, notifications.bp, approvals.bp, dashboard.bp):
         app.register_blueprint(bp)
 
     # CORS: the front end is served from a different origin

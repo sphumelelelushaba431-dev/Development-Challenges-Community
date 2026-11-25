@@ -31,8 +31,8 @@ class Config:
     # Business rules
     SUPERVISOR_CAP = 5        # open challenges per supervisor
     STUDENT_CAP = 3           # active challenges per student
-    LAB_VENUES = ["Lab DC-001", "Lab DC-002", "Lab DC-003", "Lab DC-004"]
-    LAB_OPEN, LAB_CLOSE = "08:00", "17:00"
+    AUTO_TEAM_SIZE = 3        # students auto-assigned to an approved challenge
+    MEETING_MODES = ("Online", "In person")
 
     # MCDA (see app/mcda.py)
     # Weights come from AHP pairwise judgements (Saaty 1–9 scale: "the first is x times as important as the second").

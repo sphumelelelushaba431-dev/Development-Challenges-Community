@@ -14,7 +14,7 @@ DROP TABLE IF EXISTS users;
 CREATE TABLE users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   member_no     TEXT    NOT NULL UNIQUE,            -- DCC00001
-  role          TEXT    NOT NULL CHECK (role IN ('student','supervisor','representative','admin')),
+  role          TEXT    NOT NULL CHECK (role IN ('student','supervisor','representative')),
   title         TEXT    NOT NULL DEFAULT '',
   first_name    TEXT    NOT NULL,
   surname       TEXT    NOT NULL,
@@ -79,28 +79,7 @@ CREATE TABLE progress_updates (
   created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE documents (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  challenge_id INTEGER NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
-  user_id      INTEGER NOT NULL REFERENCES users(id),
-  filename     TEXT    NOT NULL,
-  stored_as    TEXT    NOT NULL,
-  uploaded_at  TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE requests (                               -- a student asks to work on a challenge
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  challenge_id INTEGER NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
-  student_id   INTEGER NOT NULL REFERENCES users(id),
-  message      TEXT    NOT NULL DEFAULT '',
-  status       TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','declined')),
-  note         TEXT,
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
-  decided_at   TEXT,
-  UNIQUE (challenge_id, student_id)
-);
-
-CREATE TABLE meetings (                               -- always in person, in a DC lab
+CREATE TABLE meetings (                               -- venue stores the mode: Online | In person
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   supervisor_id INTEGER NOT NULL REFERENCES users(id),
   challenge_id  INTEGER NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,

@@ -1,4 +1,4 @@
-"""In-person meetings in the DC labs, booked by supervisors (no double bookings)."""
+"""Meetings booked by supervisors. Mode is Online or In person; invitees are derived from the challenge team."""
 from datetime import date, datetime
 
 from flask import Blueprint, current_app, g, jsonify, request
@@ -6,32 +6,40 @@ from flask import Blueprint, current_app, g, jsonify, request
 from ..auth import login_required
 from ..db import execute, jdump, jload, query
 from ..errors import fail
-from ..services import challenge_by_code, full_name, notify, team_of, user_by_name_or_no
+from ..services import OPEN, challenge_by_code, full_name, notify, team_of, user_by_name_or_no
 
 bp = Blueprint("meetings", __name__, url_prefix="/api/meetings")
 
 
-def _mins(hhmm):
-    h, m = hhmm.split(":")
-    return int(h) * 60 + int(m)
+def _attendees(ch):
+    """Whole team, the submitter and the challenge supervisor — no client-supplied invite list."""
+    ids = [s["id"] for s in team_of(ch["id"])]
+    ids += [ch["submitted_by"], ch["supervisor_id"]]
+    people, seen = [], set()
+    for uid in ids:
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        u = query("SELECT * FROM users WHERE id = ?", (uid,), one=True)
+        if u:
+            people.append(u)
+    return people
 
 
 def serialize(m, with_people=True):
     ch = query("SELECT code, title FROM challenges WHERE id = ?", (m["challenge_id"],), one=True)
     sup = query("SELECT * FROM users WHERE id = ?", (m["supervisor_id"],), one=True)
-    out = {"id": "M-%d" % m["id"], "venue": m["venue"], "date": m["date"], "start": m["start"], "mins": m["minutes"]}
+    mode = m["venue"] if m["venue"] in current_app.config["MEETING_MODES"] else "In person"
+    out = {"id": "M-%d" % m["id"], "mode": mode, "date": m["date"], "start": m["start"], "mins": m["minutes"]}
     if with_people:
-        out.update({"cid": ch["code"], "title": m["title"], "challenge": "%s (%s)" % (ch["title"], ch["code"]), "organiser": full_name(sup),
-                    "people": jload(m["people"]), "agenda": m["agenda"]})
+        people = []
+        for value in jload(m["people"]):
+            u = user_by_name_or_no(value)
+            people.append(full_name(u) if u else value)
+        out.update({"cid": ch["code"] if ch else "", "title": m["title"],
+                    "challenge": "%s (%s)" % (ch["title"], ch["code"]) if ch else "",
+                    "organiser": full_name(sup) if sup else "", "people": people, "agenda": m["agenda"]})
     return out
-
-
-def clash(venue, day, start, mins, skip_id=None):
-    a, b = _mins(start), _mins(start) + mins
-    for m in query("SELECT * FROM meetings WHERE venue = ? AND date = ?", (venue, day)):
-        if m["id"] != skip_id and _mins(m["start"]) < b and a < _mins(m["start"]) + m["minutes"]:
-            return m
-    return None
 
 
 @bp.get("")
@@ -41,12 +49,10 @@ def list_meetings():
     rows = query("SELECT * FROM meetings WHERE date >= ? ORDER BY date, start", (today,))
     me = full_name(g.user)
     if g.user["role"] == "supervisor":
-        mine = [serialize(m) for m in rows if m["supervisor_id"] == g.user["id"]]
-        booked = [serialize(m, False) for m in rows if m["supervisor_id"] != g.user["id"]]   # other bookings: time and lab only
-        return jsonify({"meetings": mine, "booked": booked})
-    if g.user["role"] == "admin":
-        return jsonify({"meetings": [serialize(m) for m in rows], "booked": []})
-    return jsonify({"meetings": [serialize(m) for m in rows if me in jload(m["people"])], "booked": []})
+        return jsonify({"meetings": [serialize(m) for m in rows if m["supervisor_id"] == g.user["id"]], "booked": []})
+    if g.user["role"] in ("student", "representative"):
+        return jsonify({"meetings": [serialize(m) for m in rows if me in serialize(m)["people"]], "booked": []})
+    fail("You do not have access to this.", 403)
 
 
 @bp.post("")
@@ -56,17 +62,14 @@ def create():
     cfg = current_app.config
     errors = {}
     ch = challenge_by_code(d.get("challenge"))
-    if not ch or ch["supervisor_id"] != g.user["id"]:
-        errors["challenge"] = "Choose one of your challenges."
+    if not ch or ch["supervisor_id"] != g.user["id"] or ch["status"] not in OPEN:
+        errors["challenge"] = "Choose one of your open challenges."
     title = (d.get("title") or "").strip()
     if len(title) < 3:
         errors["title"] = "Give the meeting a title."
-    venue = d.get("venue")
-    if venue not in cfg["LAB_VENUES"]:
-        errors["venue"] = "Choose a lab."
-    people = [p for p in (d.get("people") or []) if p]
-    if not people:
-        errors["people"] = "Invite at least one person."
+    mode = d.get("mode") or d.get("venue")
+    if mode not in cfg["MEETING_MODES"]:
+        errors["mode"] = "Choose Online or In person."
     try:
         day = date.fromisoformat(d.get("date", ""))
         start = d.get("start", "")
@@ -76,40 +79,34 @@ def create():
         day = None
         errors["date"] = "Choose a date and start time."
     if day:
-        if day.weekday() >= 5:
-            errors["date"] = "Choose a weekday — the labs are closed on weekends."
-        elif when < datetime.now():
+        if when <= datetime.now():
             errors["date"] = "Choose a time in the future."
         elif mins not in (30, 60, 90, 120):
             errors["date"] = "Choose a length of 30, 60, 90 or 120 minutes."
-        elif _mins(start) < _mins(cfg["LAB_OPEN"]) or _mins(start) + mins > _mins(cfg["LAB_CLOSE"]):
-            errors["date"] = "Meetings must be between %s and %s." % (cfg["LAB_OPEN"], cfg["LAB_CLOSE"])
-        elif venue in cfg["LAB_VENUES"]:
-            x = clash(venue, day.isoformat(), start, mins)
-            if x:
-                errors["venue"] = "%s is booked from %s for %d minutes. Choose another lab or time." % (venue, x["start"], x["minutes"])
     if errors:
         fail("Please correct the highlighted fields.", 422, **errors)
+
+    people = _attendees(ch)
     mid = execute("INSERT INTO meetings (supervisor_id, challenge_id, title, venue, date, start, minutes, people, agenda) VALUES (?,?,?,?,?,?,?,?,?)",
-                  (g.user["id"], ch["id"], title, venue, day.isoformat(), start, mins, jdump(people), (d.get("agenda") or "").strip()))
+                  (g.user["id"], ch["id"], title, mode, day.isoformat(), start, mins,
+                   jdump([u["member_no"] for u in people]), (d.get("agenda") or "").strip()))
     me = full_name(g.user)
-    for p in people:
-        u = user_by_name_or_no(p)
-        if u:
-            notify(u["id"], "meeting", me, "Meeting: %s · %s %s · %s (in person)." % (title, day.isoformat(), start, venue), ch["code"], "M-%d" % mid)
-    return jsonify({"message": "Meeting booked in %s. %s notified." % (venue, ", ".join(people)),
+    where = mode if mode == "Online" else mode + " meeting"
+    for u in people:
+        notify(u["id"], "meeting", me, "Meeting: %s · %s %s · %s." % (title, day.isoformat(), start, where), ch["code"], "M-%d" % mid)
+    return jsonify({"message": "Meeting scheduled. Everyone invited has been notified.",
                     "meeting": serialize(query("SELECT * FROM meetings WHERE id = ?", (mid,), one=True))}), 201
 
 
 @bp.delete("/<mid>")
-@login_required("supervisor", "admin")
+@login_required("supervisor")
 def cancel(mid):
     m = query("SELECT * FROM meetings WHERE id = ?", (int(str(mid).replace("M-", "")),), one=True)
-    if not m or (g.user["role"] != "admin" and m["supervisor_id"] != g.user["id"]):
+    if not m or m["supervisor_id"] != g.user["id"]:
         fail("Meeting not found.", 404)
     execute("DELETE FROM meetings WHERE id = ?", (m["id"],))
-    for p in jload(m["people"]):
-        u = user_by_name_or_no(p)
+    for value in jload(m["people"]):
+        u = user_by_name_or_no(value)
         if u:
             notify(u["id"], "meeting", full_name(g.user), "Cancelled: %s on %s at %s." % (m["title"], m["date"], m["start"]))
-    return jsonify({"message": "Meeting cancelled. %s notified." % ", ".join(jload(m["people"]))})
+    return jsonify({"message": "Meeting cancelled. Everyone invited has been notified."})

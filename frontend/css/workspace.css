@@ -1,24 +1,37 @@
 /* Workspace layout — plain CSS so no Tailwind rebuild is needed.
    Inner panel content reuses the compiled utilities and helpers in app.css. */
 
-/* Top action bar (role-gated buttons) */
+/* Header: title left, role-gated buttons + bell + avatar right */
+.ws-header { padding: 0 20px; gap: 12px; }
+.ws-title { flex: 0 0 auto; }
 .ws-nav {
-  position: sticky; top: 64px; z-index: 20;
   display: flex; align-items: center; gap: 8px;
-  overflow-x: auto; padding: 12px 24px;
-  background: #fff; border-bottom: 1px solid #e2e8f0;
+  margin-left: auto; min-width: 0; overflow-x: auto;
+  scrollbar-width: none;
 }
+.ws-nav::-webkit-scrollbar { display: none; }
 .ws-btn {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 9px 16px; border-radius: 10px;
+  padding: 9px 15px; border-radius: 10px;
   border: 1px solid #cbd5e1; background: #fff;
   font-size: 14px; font-weight: 600; color: #334155;
   cursor: pointer; white-space: nowrap; transition: background .15s, color .15s, border-color .15s;
 }
-.ws-btn svg { width: 18px; height: 18px; }
 .ws-btn:hover { background: #f8fafc; }
 .ws-btn.active { background: #1e3a8a; border-color: #1e3a8a; color: #fff; }
 .ws-btn.active:hover { background: #1e40af; }
+@media (max-width: 760px) {
+  .ws-header { padding: 0 12px; gap: 8px; }
+  .ws-title { font-size: 18px !important; }
+  .ws-nav { gap: 5px; }
+  .ws-btn { padding: 8px 10px; font-size: 13px; border-radius: 8px; }
+}
+@media (max-width: 460px) {
+  .ws-header { gap: 6px; }
+  .ws-title { font-size: 16px !important; }
+  #bell, #top-avatar { width: 36px; height: 36px; }
+  .ws-btn { padding: 7px 8px; font-size: 12px; }
+}
 
 /* Clear workspace area */
 .ws-main {
@@ -38,16 +51,34 @@
 .ws-main .card2 { overflow: visible; }
 .ws-main .panel-b { overflow: visible; }
 
-/* Empty prompt */
-.ws-empty {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; padding: 72px 24px; gap: 12px;
-  border: 1px dashed #cbd5e1; border-radius: 16px; background: #fff;
+/* Brand placeholder — decorative DCC mark, shown before any action is opened */
+.ws-brand-empty {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 360px; padding: 40px 24px;
+  border: 1px solid #dbe3f1; border-radius: 18px;
+  background: radial-gradient(circle at 50% 28%, #eef2ff 0%, #f8faff 52%, #fff 100%);
 }
-.ws-empty .ic { display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 16px; background: #eef2ff; color: #1e3a8a; }
-.ws-empty .ic svg { width: 28px; height: 28px; }
-.ws-empty h2 { font-family: "Plus Jakarta Sans", Inter, sans-serif; font-size: 20px; font-weight: 700; color: #0f172a; }
-.ws-empty p { font-size: 14px; color: #64748b; max-width: 46ch; }
+.ws-brand-empty::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 40%, rgba(59, 91, 219, .10), transparent 62%);
+}
+.ws-brand-empty::after {
+  content: "DCC"; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%); pointer-events: none; white-space: nowrap;
+  font-family: "Plus Jakarta Sans", Inter, sans-serif;
+  font-size: clamp(150px, 28vw, 340px); font-weight: 800; line-height: 1;
+  letter-spacing: -.08em; color: rgba(59, 91, 219, .11);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(0,0,0,.62) 55%, rgba(0,0,0,.06) 100%);
+          mask-image: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(0,0,0,.62) 55%, rgba(0,0,0,.06) 100%);
+}
+@media (max-width: 760px) {
+  .ws-brand-empty { min-height: 300px; padding: 30px 18px; }
+  .ws-brand-empty::after { font-size: clamp(120px, 34vw, 210px); }
+}
+@media (max-width: 460px) {
+  .ws-brand-empty { min-height: 260px; }
+}
 
 /* Inline form pieces */
 .ws-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; flex-wrap: wrap; }

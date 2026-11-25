@@ -10,8 +10,8 @@ from .nlp.classify import classify
 from .nlp.keywords import build_idf
 from .nlp.taxonomy import AREA_VOCAB, AREAS
 
-OPEN = ("Unallocated", "Allocated", "In Progress", "Pending Verification")      # count toward the supervisor cap
-ACTIVE = ("Allocated", "In Progress", "Pending Verification")                   # count toward the student cap
+OPEN = ("Unallocated", "Allocated", "In Progress")      # count toward the supervisor cap
+ACTIVE = ("Allocated", "In Progress")                   # count toward the student cap
 
 
 # ---------- people ----------
@@ -37,7 +37,7 @@ def profile(u):
 
 
 def me_payload(u):
-    label = {"student": "Student", "supervisor": "Supervisor", "representative": "Representative", "admin": "Administrator"}[u["role"]]
+    label = {"student": "Student", "supervisor": "Supervisor", "representative": "Representative"}.get(u["role"], u["role"].title())
     return {"name": full_name(u), "initials": initials(u), "role": u["role"], "roleLabel": label, "meta": label + " · " + u["member_no"],
             "org": u["organisation"], "interests": areas_of(u), "profile": profile(u)}
 
@@ -114,10 +114,16 @@ def student_candidates():
 
 
 def assign_supervisor(classification, exclude=None):
-    if classification["stage"] == "none":
+    candidates = supervisor_candidates(exclude)
+    if not candidates:
         return None, []
-    ranked = mcda.rank(classification, supervisor_candidates(exclude), _cfg(), supervisor=True)
+    ranked = [] if classification["stage"] == "none" else mcda.rank(classification, candidates, _cfg(), supervisor=True)
     best = next((r for r in ranked if r["recommended"]), None)
+    if not best:                                       # always auto-assign, even with no keyword match
+        pick = min(candidates, key=lambda x: (x["load"], x["record"]))
+        best = next((r for r in ranked if r["id"] == pick["id"]), None)
+        if not best:
+            best = dict(pick, recommended=True)
     return best, ranked
 
 
@@ -136,9 +142,10 @@ def notify(user_id, kind, sender, text, about="", ref=""):
     execute("INSERT INTO notifications (user_id, kind, sender, about, text, ref) VALUES (?,?,?,?,?,?)", (user_id, kind, sender, about, text, ref))
 
 
-def notify_admins(kind, sender, text, about=""):
-    for a in query("SELECT id FROM users WHERE role = 'admin' AND status = 'active'"):
-        notify(a["id"], kind, sender, text, about)
+def notify_supervisors(kind, sender, text, about=""):
+    """Approvals and unmatched challenges are handled by supervisors, not an administrator role."""
+    for s in query("SELECT id FROM users WHERE role = 'supervisor' AND status = 'active'"):
+        notify(s["id"], kind, sender, text, about)
 
 
 def log(who, text, kind="info"):
