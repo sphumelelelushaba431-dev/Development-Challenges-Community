@@ -336,6 +336,8 @@
   // Card: {id, title, sub, count, tone:'warn', countRight, right, body, cls}
   function card(o) {
     var chip = o.count == null ? '' : '<span class="cnt' + (o.tone === 'warn' ? ' warn' : '') + '">' + o.count + '</span>';
+    // No title: a plain card (used when the page heading already names it, so nothing is repeated)
+    if (!o.title) return '<section class="card2 ' + (o.cls || '') + '"' + (o.label ? ' aria-label="' + esc(o.label) + '"' : '') + '>' + o.body + '</section>';
     return '<section class="card2 ' + (o.cls || '') + '" aria-labelledby="h-' + o.id + '"><div class="flex shrink-0 items-start justify-between gap-3"><div class="min-w-0"><div class="flex items-center gap-3"><h2 id="h-' + o.id + '">' + esc(o.title) + '</h2>' + (o.countRight ? '' : chip) + '</div>' +
       '</div>' + (o.countRight ? chip : '') + (o.right || '') + '</div>' + o.body + '</section>';
   }

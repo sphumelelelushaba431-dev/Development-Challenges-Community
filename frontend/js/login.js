@@ -37,6 +37,11 @@
     i.type = show ? 'text' : 'password'; tg.innerHTML = show ? EYE_OFF : EYE;
     tg.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
   });
+  // Coming from registration: login.html?member=DCC00023 fills in the new Member ID
+  try {
+    var fromReg = new URLSearchParams(location.search).get('member');
+    if (fromReg && MEMBER_ID.test(fromReg)) { $('member-id').value = fromReg.toUpperCase(); setTimeout(function () { $('password').focus(); }, 0); }
+  } catch (e) {}
   ['member-id', 'password', 'reset-email'].forEach(function (id) { $(id).addEventListener('input', function () { setErr(id, ''); }); });
 
   // Login

@@ -58,10 +58,34 @@ def init_db():
         get_db().executescript(f.read().decode("utf8"))
 
 
+_ACTIVITY_COLUMNS = {
+    "action": "TEXT NOT NULL DEFAULT ''", "actor_id": "INTEGER", "actor_no": "TEXT NOT NULL DEFAULT ''",
+    "actor_role": "TEXT NOT NULL DEFAULT ''", "session_id": "INTEGER", "duration": "INTEGER", "ip": "TEXT NOT NULL DEFAULT ''",
+}
+
+
+def migrate():
+    """Bring a database made by an older version up to date (adds the audit-log columns and the sessions table)."""
+    db = get_db()
+    db.executescript("""CREATE TABLE IF NOT EXISTS sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')), last_seen TEXT NOT NULL DEFAULT (datetime('now')),
+        ended_at TEXT, end_reason TEXT, ip TEXT NOT NULL DEFAULT '', agent TEXT NOT NULL DEFAULT '');
+        CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);""")
+    have = {r["name"] for r in db.execute("PRAGMA table_info(activity)").fetchall()}
+    for name, decl in _ACTIVITY_COLUMNS.items():
+        if name not in have:
+            db.execute("ALTER TABLE activity ADD COLUMN %s %s" % (name, decl))
+    db.execute("CREATE INDEX IF NOT EXISTS idx_activity_actor ON activity(actor_id)")
+    db.commit()
+
+
 def ensure_db(app):
-    """Create (and optionally seed) the database the first time the app starts."""
+    """Create (and optionally seed) the database the first time the app starts; upgrade an existing one."""
     path = app.config["DATABASE"]
     if os.path.exists(path):
+        with app.app_context():
+            migrate()
         return
     with app.app_context():
         init_db()

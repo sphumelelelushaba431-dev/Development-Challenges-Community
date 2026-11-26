@@ -4,7 +4,7 @@ from flask import Blueprint, current_app, g, jsonify
 
 from ..auth import login_required
 from ..db import jload, query
-from ..services import (ACTIVE, OPEN, area_index, days_ago, full_name, me_payload, supervisor_load, team_of)
+from ..services import (ACTIVE, OPEN, area_index, full_name, me_payload, supervisor_load, team_of)
 from .notifications import for_user
 
 bp = Blueprint("dashboard", __name__, url_prefix="/api")
@@ -51,17 +51,10 @@ def student():
 def supervisor():
     me = g.user
     chs = [_row(ch) for ch in query("SELECT * FROM challenges WHERE supervisor_id = ? ORDER BY due_date", (me["id"],))]
-    users = query("SELECT * FROM users ORDER BY joined_at DESC")
-    pending = [{"id": u["member_no"], "name": full_name(u), "role": u["role"].title(), "org": u["organisation"],
-                "email": u["email"], "when": u["joined_at"]} for u in users if u["status"] == "pending"]
-    locked = [{"id": u["member_no"], "name": full_name(u), "why": "%d failed login attempts" % u["failed_logins"],
-               "ago": days_ago(u["locked_at"] or u["joined_at"])} for u in users if u["status"] == "locked"]
-    activity = [{"who": a["who"], "text": a["text"], "kind": a["kind"], "ago": days_ago(a["created_at"])}
-                for a in query("SELECT * FROM activity ORDER BY id DESC LIMIT 30")]
+    # Member accounts and the activity history are in the Audit log (routes/audit.py), not here.
     events = [{"date": ch["created"], "kind": "sub", "title": ch["title"]} for ch in chs] + \
              [{"date": ch["completed"], "kind": "done", "title": ch["title"]} for ch in chs if ch["completed"]]
-    return jsonify({"me": me_payload(me), "challenges": chs, "pending": pending, "locked": locked,
-                    "activity": activity, "cap": current_app.config["SUPERVISOR_CAP"],
+    return jsonify({"me": me_payload(me), "challenges": chs, "cap": current_app.config["SUPERVISOR_CAP"],
                     "load": supervisor_load(me["id"]), "events": events, "notes": for_user(me["id"])})
 
 

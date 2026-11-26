@@ -41,21 +41,81 @@ def test_auth_required(client):
     assert client.get("/api/dashboard/student").status_code == 401
 
 
-def test_register_approve_login(client, login):
-    body = dict(role="student", title="Ms", gender="Female", first_name="Lerato", surname="Dlamini", id_number="9001015009086",
-                phone="0712223333", phone_country="ZA", email="lerato@example.com", organisation="University of Zululand", area_of_interest="Research",
-                address="1 Main Road, Empangeni, 3880", password="Strong@123", confirm_password="Strong@123", terms_accepted="yes", popia_consent="yes")
+REGISTRATION = dict(role="student", title="Ms", gender="Female", first_name="Lerato", surname="Dlamini", id_number="9001015009086",
+                    phone="0712223333", phone_country="ZA", email="Lerato@Example.com", organisation="University of Zululand", area_of_interest="Research",
+                    address="1 Main Road, Empangeni, 3880", password="Strong@123", confirm_password="Strong@123", terms_accepted="yes", popia_consent="yes")
+
+
+def test_register_then_login_with_own_credentials_and_email(app, client):
+    body = REGISTRATION
     bad = client.post("/api/auth/register", json={**body, "terms_accepted": "", "id_number": "123"})
     assert bad.status_code == 422 and "id_number" in bad.json["fields"] and "terms" in bad.json["fields"]
     bad_phone = client.post("/api/auth/register", json={**body, "phone_country": "ZZ"})
     assert bad_phone.status_code == 422 and "phone" in bad_phone.json["fields"]
     r = client.post("/api/auth/register", json=body)
-    assert r.status_code == 201
+    assert r.status_code == 201 and r.json["status"] == "active" and r.json["email_sent"] is True
+    no = r.json["member_no"]
+    assert no in r.json["message"]
+
+    # confirmation e-mail with the member's ID and details — never the password
+    mail = app.extensions["outbox"][-1]
+    assert mail["To"] == "lerato@example.com" and no in mail["Subject"]
+    text = mail.get_body(("plain",)).get_content()
+    assert no in text and "Ms Lerato Dlamini" in text and "Student" in text and "Strong@123" not in text
+
+    # the credentials chosen at registration work straight away — by Member ID or by e-mail
+    assert client.post("/api/auth/login", json={"member_id": no, "password": "Strong@123"}).status_code == 200
+    assert client.post("/api/auth/login", json={"member_id": no.lower(), "password": "Strong@123"}).status_code == 200
+    assert client.post("/api/auth/login", json={"email": "LERATO@example.com", "password": "Strong@123"}).status_code == 200
+    assert client.post("/api/auth/login", json={"member_id": no, "password": "Wrong@123"}).status_code == 401
+    assert client.post("/api/auth/register", json=body).json["fields"]["email"]          # e-mail already registered
+
+
+def test_register_with_approval_required(app, client, login):
+    app.config["REQUIRE_APPROVAL"] = True
+    r = client.post("/api/auth/register", json=REGISTRATION)
+    assert r.status_code == 201 and r.json["status"] == "pending"
     no = r.json["member_no"]
     assert client.post("/api/auth/login", json={"member_id": no, "password": "Strong@123"}).status_code == 403
     sup = login("DCC00001")
     assert client.post("/api/approvals/users/%s/approve" % no, headers=sup).status_code == 200
+    assert "approved" in app.extensions["outbox"][-1]["Subject"]
     assert client.post("/api/auth/login", json={"member_id": no, "password": "Strong@123"}).status_code == 200
+
+
+def test_audit_log_tracks_who_what_when_and_how_long(client, login):
+    stu = login("DCC00002")
+    assert client.get("/api/me", headers=stu).status_code == 200
+    assert client.post("/api/auth/login", json={"member_id": "DCC00004", "password": "nope"}).status_code == 401
+    assert client.post("/api/auth/logout", headers=stu).status_code == 200
+    assert client.get("/api/me", headers=stu).status_code == 401                     # a logged-out token stops working
+
+    sup = login("DCC00001")
+    for h in (stu, login("DCC00003")):
+        assert client.get("/api/audit/log", headers=h).status_code in (401, 403)
+    entries = client.get("/api/audit/log?member=DCC00002", headers=sup).json["entries"]
+    actions = [e["action"] for e in entries]
+    assert "auth.login" in actions and "auth.logout" in actions
+    e = next(e for e in entries if e["action"] == "auth.logout")
+    assert e["who"] == "Ms Amahle Mthembu" and e["role"] == "Student" and e["at"] and e["duration"] is not None
+    assert next(e for e in entries if e["action"] == "auth.login")["session"] in ("ended", "active", "idle")
+    failed = client.get("/api/audit/log?area=auth&q=wrong password", headers=sup).json["entries"]
+    assert any(e["member"] == "DCC00004" for e in failed)
+
+    users = client.get("/api/audit/users", headers=sup).json["users"]
+    amahle = next(u for u in users if u["id"] == "DCC00002")
+    assert amahle["sessions"] >= 1 and amahle["last_login"] and amahle["time_online"] >= 0
+
+    # supervisors manage accounts: lock signs the member out, unlock lets them back in
+    stu2 = login("DCC00005")
+    assert client.post("/api/approvals/users/DCC00005/lock", json={"reason": "Shared account"}, headers=sup).status_code == 200
+    assert client.get("/api/me", headers=stu2).status_code in (401, 403)
+    assert client.post("/api/auth/login", json={"member_id": "DCC00005", "password": "Demo@1234"}).status_code == 403
+    assert client.post("/api/approvals/users/DCC00001/lock", json={"reason": "self"}, headers=sup).status_code == 409
+    assert client.post("/api/approvals/users/DCC00005/unlock", headers=sup).status_code == 200
+    assert client.post("/api/auth/login", json={"member_id": "DCC00005", "password": "Demo@1234"}).status_code == 200
+    log = client.get("/api/audit/log?area=account", headers=sup).json["entries"]
+    assert {"account.lock", "account.unlock"} <= {e["action"] for e in log}
 
 
 def test_member_can_upload_profile_photo(client, login):

@@ -129,8 +129,25 @@ def seed():
     note("DCC00003", "message", "Dr Sipho Ndlovu", "The storytelling challenge is approved; we are matching students now.", codes["Township storytelling and publicity drive"], 3)
     note("DCC00001", "alert", "Dr Mandla Zungu", "New supervisor registration waiting for approval.", "DCC00021")
 
-    for who, text, kind, ago in (("Dr Mandla Zungu", "registered as a Supervisor — awaiting approval.", "warn", 0),
-                                 ("Prof Kavitha Naidoo", "completed %s at 100%%." % codes["Campus recycling initiative"], "ok", 12),
-                                 ("System", "3 failed login attempts for DCC00022 — account locked.", "bad", 1),
-                                 ("Mr Kagiso Nkosi", "submitted %s “Automated timetable clash detection”." % codes["Automated timetable clash detection"], "info", 2)):
-        execute("INSERT INTO activity (who, text, kind, created_at) VALUES (?,?,?,?)", (who, text, kind, ts(-ago)))
+    roles = {r["member_no"]: r["role"] for r in query("SELECT member_no, role FROM users")}
+    for who, no, text, kind, action, ago in (
+            ("Dr Mandla Zungu", "DCC00021", "registered as a Supervisor — awaiting approval.", "warn", "auth.register", 0),
+            ("Prof Kavitha Naidoo", "DCC00015", "completed %s at 100%%." % codes["Campus recycling initiative"], "ok", "challenge.complete", 12),
+            ("System", "DCC00022", "3 failed login attempts for DCC00022 — account locked.", "bad", "account.locked", 1),
+            ("Mr Kagiso Nkosi", "DCC00010", "submitted %s “Automated timetable clash detection”." % codes["Automated timetable clash detection"], "info", "challenge.submit", 2)):
+        execute("INSERT INTO activity (who, text, kind, action, actor_id, actor_no, actor_role, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (who, text, kind, action, ids.get(no), no, roles.get(no, ""), ts(-ago)))
+
+    # A few past sign-ins so the Audit log shows how long members used the system
+    names = {r["member_no"]: r for r in query("SELECT * FROM users")}
+    for no, ago, minutes in (("DCC00011", 3, 42), ("DCC00002", 2, 27), ("DCC00003", 2, 15), ("DCC00002", 1, 53), ("DCC00001", 1, 18)):
+        start = datetime.now(timezone.utc) - timedelta(days=ago, hours=2)
+        end = start + timedelta(minutes=minutes)
+        f = lambda t: t.strftime("%Y-%m-%d %H:%M:%S")
+        sid = execute("INSERT INTO sessions (user_id, started_at, last_seen, ended_at, end_reason, ip) VALUES (?,?,?,?,?,?)",
+                      (ids[no], f(start), f(end), f(end), "logout", "127.0.0.1"))
+        u = names[no]
+        who = (u["title"] + " " if u["title"] else "") + u["first_name"] + " " + u["surname"]
+        for text, action, at, dur in (("signed in.", "auth.login", start, None), ("signed out.", "auth.logout", end, minutes * 60)):
+            execute("""INSERT INTO activity (who, text, kind, action, actor_id, actor_no, actor_role, session_id, duration, ip, created_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""", (who, text, "info", action, ids[no], no, u["role"], sid, dur, "127.0.0.1", f(at)))

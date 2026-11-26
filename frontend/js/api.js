@@ -57,7 +57,12 @@
   function fieldErrors(e, map) {
     Object.keys(e.fields || {}).forEach(function (k) { var id = (map && map[k]) || k, el = document.getElementById(id + '-err'); if (el) el.textContent = e.fields[k]; });
   }
-  function logout() { clear(); location.href = 'login.html'; }
+  // End the sign-in on the server too (the Audit log records how long it lasted), then leave
+  function logout() {
+    var leave = function () { clear(); location.href = 'login.html'; };
+    if (!token()) return leave();
+    request('POST', '/auth/logout', {}).then(leave, leave);
+  }
 
   window.API = {
     on: on, base: base, HOME: HOME, token: token, user: user, session: session, clear: clear, logout: logout,
