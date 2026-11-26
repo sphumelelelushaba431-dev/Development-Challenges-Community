@@ -9,11 +9,13 @@
   var role = null, ME = null, D = null, MEET = null;
   var active = null, sel = null;
 
-  var NAV = {
-    student:        [['solve', 'Solve'], ['track', 'Track']],
-    representative: [['submit', 'Submit'], ['track', 'Track']],
-    supervisor:     [['submit', 'Submit'], ['solve', 'Solve'], ['track', 'Track'], ['meetings', 'Meeting']]
+  var ALL_NAV = [['submit', 'Submit'], ['solve', 'Solve'], ['track', 'Track'], ['meetings', 'Meeting']];
+  var ALLOWED = {
+    student:        ['solve', 'track'],
+    representative: ['submit', 'track'],
+    supervisor:     ['submit', 'solve', 'track', 'meetings']
   };
+  var canUse = function (key) { return (ALLOWED[role] || []).indexOf(key) > -1; };
   var TITLES = { solve: 'Solve', submit: 'Submit', track: 'Track', meetings: 'Meeting' };
   var LABEL = {
     'Unallocated': 'Open', 'Approved': 'Open', 'Submitted': 'Review', 'Under Review': 'Review',
@@ -71,7 +73,7 @@
   function start() {
     if (live) {
       var u = API.user();
-      if (!API.token() || !u || !NAV[u.role]) { location.replace('login.html'); return; }
+      if (!API.token() || !u || !ALLOWED[u.role]) { location.replace('login.html'); return; }
       role = u.role;
       API.boot(role).then(function (data) {
         D = data; ME = D.me; normalize(); U.shell(shellCfg()); U.serverNotes(D.notes, noteOpener); renderNav(); renderEmpty();
@@ -79,7 +81,7 @@
       return;
     }
     try { role = localStorage.getItem('dcc-demo-role'); } catch (e) {}
-    if (!role || !NAV[role]) { location.replace('login.html'); return; }
+    if (!role || !ALLOWED[role]) { location.replace('login.html'); return; }
     D = demoData(role); ME = D.me;
     U.shell(shellCfg()); U.notes(demoNotes()); renderNav(); renderEmpty();
   }
@@ -112,11 +114,15 @@
 
   /* ---------- nav + one panel ---------- */
   function renderNav() {
-    document.getElementById('ws-nav').innerHTML = (NAV[role] || []).map(function (b) {
-      return '<button class="ws-btn' + (active === b[0] ? ' active' : '') + '" data-nav="' + b[0] + '" aria-pressed="' + (active === b[0]) + '">' + esc(b[1]) + '</button>';
+    document.getElementById('ws-nav').innerHTML = ALL_NAV.map(function (b) {
+      var ok = canUse(b[0]);
+      return '<button class="ws-btn' + (active === b[0] ? ' active' : '') + '" data-nav="' + b[0] + '"' +
+        (ok ? ' aria-pressed="' + (active === b[0]) + '"' : ' disabled aria-disabled="true"') +
+        '>' + esc(b[1]) + '</button>';
     }).join('');
   }
   function setActive(key, force) {
+    if (!canUse(key)) return;
     if (!force && active === key) { active = null; sel = null; renderNav(); renderEmpty(); return; }
     active = key; sel = null; renderNav();
     if (key === 'meetings') { openMeetings(); return; }
@@ -137,7 +143,7 @@
     if (m) U.meetingDetails(m);
   }
   document.getElementById('ws-nav').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-nav]'); if (b) setActive(b.dataset.nav);
+    var b = e.target.closest('[data-nav]'); if (b && !b.disabled) setActive(b.dataset.nav);
   });
   function renderEmpty() {
     var pt = document.getElementById('page-title');
