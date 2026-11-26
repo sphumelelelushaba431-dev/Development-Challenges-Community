@@ -2275,6 +2275,28 @@
     line-height: calc(var(--spacing) * 4);
     max-width: 100%;
   }
+  .phone-row {
+    display: flex;
+    align-items: stretch;
+    gap: calc(var(--spacing) * 2);
+  }
+  .phone-country {
+    flex: 0 0 156px;
+    width: 156px;
+    min-width: 0;
+    padding-inline: calc(var(--spacing) * 2.5);
+    padding-right: calc(var(--spacing) * 8);
+  }
+  .phone-number {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  @media (max-width: 480px) {
+    .phone-country {
+      flex-basis: 132px;
+      width: 132px;
+    }
+  }
   .lg-form .fld {
     padding-bottom: calc(var(--spacing) * 5);
   }

@@ -23,7 +23,7 @@ backend/
 │   ├── db.py              SQLite helpers and CLI commands
 │   ├── auth.py            Bearer tokens, role checks
 │   ├── errors.py          JSON errors
-│   ├── validators.py      SA ID (Luhn), phone, e-mail, password rules
+│   ├── validators.py      SA ID (Luhn), international phone, e-mail, password rules
 │   ├── services.py        capacity, classification, matching, notifications, activity log
 │   ├── mcda.py            AHP weights · WSM score · TOPSIS ranking
 │   ├── nlp/
@@ -57,7 +57,7 @@ Every route is under `/api`. Send `Authorization: Bearer <token>` except where t
 | `POST /auth/register` | public | Register. The form fields match the registration page; a JPG/PNG photo is optional (multipart, up to 2 MB). The account starts as pending |
 | `POST /auth/login` | public | `{member_id, password}` → `{token, user, home}`. The account locks after 3 failed attempts |
 | `POST /auth/forgot-password` · `POST /auth/reset-password` | public | Reset token, valid for 30 minutes |
-| `GET/PUT /me` · `POST /me/password` | any | Profile and password. `PUT /me` accepts profile photos as multipart form data (JPG/PNG, up to 2 MB) |
+| `GET/PUT /me` · `POST /me/password` | any | Profile and password. `PUT /me` accepts `phone_country` as an ISO country code and accepts profile photos as multipart form data (JPG/PNG, up to 2 MB) |
 | `GET /photos/{filename}` | public | Retrieve an uploaded profile photo |
 | `GET /dashboard/{student,supervisor,representative,admin}` | that role | Everything the dashboard shows |
 | `GET /public/overview` | public | Visitors' dashboard data |

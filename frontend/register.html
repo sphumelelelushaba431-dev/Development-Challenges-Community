@@ -105,7 +105,12 @@
         </div>
         <div class="fld">
           <label for="phone" class="label">Phone Number <span class="text-red-600">*</span></label>
-          <input id="phone" name="phone" type="tel" class="input" placeholder="e.g. 071 234 5678" autocomplete="tel">
+          <div class="phone-row">
+            <select id="phone-country" name="phone_country" class="input phone-country" aria-label="Country code">
+              <option value="ZA">South Africa (+27)</option>
+            </select>
+            <input id="phone" name="phone" type="tel" class="input phone-number" placeholder="e.g. 71 234 5678" autocomplete="tel-national">
+          </div>
           <span class="err" id="phone-err"></span>
         </div>
         <div class="fld lg:col-span-2">
@@ -172,6 +177,7 @@
 
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
+  <script src="js/phone-lib.js"></script>
   <script src="js/register.js"></script>
 </body>
 </html>

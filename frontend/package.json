@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "scripts": {
+    "build:phone": "esbuild js/phone-lib-entry.js --bundle --format=iife --outfile=js/phone-lib.js"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.11.20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

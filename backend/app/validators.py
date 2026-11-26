@@ -2,6 +2,9 @@
 import re
 from datetime import date
 
+import phonenumbers
+from phonenumbers import PhoneNumberFormat
+
 EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
 PHONE = re.compile(r"^(\+27|0)[6-8]\d{8}$")
 MEMBER_NO = re.compile(r"^DCC\d{5}$", re.I)
@@ -12,6 +15,20 @@ ROLES = {"student", "supervisor", "representative"}
 
 def clean_phone(p):
     return re.sub(r"[\s()\-]", "", p or "")
+
+
+def parse_phone(phone, country):
+    """Return a valid number in E.164 form for the selected ISO country, or None."""
+    country = (country or "").strip().upper()
+    if country not in phonenumbers.SUPPORTED_REGIONS:
+        return None
+    try:
+        number = phonenumbers.parse((phone or "").strip(), country)
+    except phonenumbers.NumberParseException:
+        return None
+    if not phonenumbers.is_valid_number_for_region(number, country):
+        return None
+    return phonenumbers.format_number(number, PhoneNumberFormat.E164)
 
 
 def valid_sa_id(n):

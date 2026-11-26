@@ -43,10 +43,12 @@ def test_auth_required(client):
 
 def test_register_approve_login(client, login):
     body = dict(role="student", title="Ms", gender="Female", first_name="Lerato", surname="Dlamini", id_number="9001015009086",
-                phone="0712223333", email="lerato@example.com", organisation="University of Zululand", area_of_interest="Research",
+                phone="0712223333", phone_country="ZA", email="lerato@example.com", organisation="University of Zululand", area_of_interest="Research",
                 address="1 Main Road, Empangeni, 3880", password="Strong@123", confirm_password="Strong@123", terms_accepted="yes", popia_consent="yes")
     bad = client.post("/api/auth/register", json={**body, "terms_accepted": "", "id_number": "123"})
     assert bad.status_code == 422 and "id_number" in bad.json["fields"] and "terms" in bad.json["fields"]
+    bad_phone = client.post("/api/auth/register", json={**body, "phone_country": "ZZ"})
+    assert bad_phone.status_code == 422 and "phone" in bad_phone.json["fields"]
     r = client.post("/api/auth/register", json=body)
     assert r.status_code == 201
     no = r.json["member_no"]
@@ -60,7 +62,8 @@ def test_member_can_upload_profile_photo(client, login):
     headers = login("DCC00002")
     current = client.get("/api/me", headers=headers).json["profile"]
     response = client.put("/api/me", headers=headers, data={
-        "email": current["email"], "phone": current["phone"], "org": current["org"], "address": current["address"],
+        "email": current["email"], "phone": current["phone"], "phone_country": "ZA",
+        "org": current["org"], "address": current["address"],
         "photo": (BytesIO(b"test image"), "profile.png", "image/png"),
     }, content_type="multipart/form-data")
     assert response.status_code == 200

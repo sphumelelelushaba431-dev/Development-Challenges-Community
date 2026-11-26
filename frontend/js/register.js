@@ -5,7 +5,6 @@
   var EYE = '<svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
   var EYE_OFF = '<svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22"/></svg>';
   var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-  var PHONE = /^(\+27|0)[6-8]\d{8}$/;
   var RULES = [
     ['8+ characters', function (p) { return p.length >= 8; }],
     ['uppercase', function (p) { return /[A-Z]/.test(p); }],
@@ -16,6 +15,45 @@
   var $ = function (id) { return document.getElementById(id); };
   var val = function (id) { return $(id).value.trim(); };
   var form = $('reg-form');
+
+  function phoneDetails() {
+    var country = $('phone-country').value || 'ZA';
+    var raw = val('phone').replace(/[\s()-]/g, '');
+    var lib = window.DCCPhone;
+    if (!lib || typeof lib.parsePhoneNumberFromString !== 'function') {
+      var za = /^(\+?27|0)([6-8]\d{8})$/.exec(raw);
+      return {
+        country: country,
+        number: country === 'ZA' && za ? '+27' + za[2] : raw,
+        valid: country === 'ZA' && !!za
+      };
+    }
+    var parsed = lib.parsePhoneNumberFromString(raw, country);
+    return {
+      country: country,
+      number: parsed && parsed.number ? parsed.number : raw,
+      valid: !!(parsed && typeof parsed.isValid === 'function' && parsed.isValid())
+    };
+  }
+  function fillCountries() {
+    var lib = window.DCCPhone, select = $('phone-country');
+    if (!lib || typeof lib.getCountries !== 'function' || typeof lib.getCountryCallingCode !== 'function') return;
+    var names;
+    try { names = new Intl.DisplayNames(['en'], { type: 'region' }); } catch (e) { names = null; }
+    var countries = lib.getCountries().map(function (code) {
+      var name = code;
+      try { name = names && names.of(code) ? names.of(code) : code; } catch (e) { name = code; }
+      return { code: code, name: name + ' (+' + lib.getCountryCallingCode(code) + ')' };
+    }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    select.textContent = '';
+    countries.forEach(function (item) {
+      var option = document.createElement('option');
+      option.value = item.code;
+      option.textContent = item.name;
+      select.appendChild(option);
+    });
+    select.value = 'ZA';
+  }
 
   function setErr(id, msg) {
     var el = $(id), e = $(id + '-err');
@@ -97,7 +135,9 @@
   }
   $('terms-val').value = 'yes';
   $('popia-val').value = 'yes';
+  fillCountries();
   form.querySelectorAll('.input').forEach(function (el) { el.addEventListener('input', function () { setErr(el.id, ''); }); });
+  $('phone-country').addEventListener('change', function () { setErr('phone', ''); });
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -109,7 +149,8 @@
     ok &= setErr('first-name', val('first-name').length < 2 ? 'Enter your first name.' : '');
     ok &= setErr('surname', val('surname').length < 2 ? 'Enter your surname.' : '');
     ok &= setErr('id-number', !validSAID(val('id-number')) ? 'Enter a valid 13-digit SA ID number.' : '');
-    ok &= setErr('phone', !PHONE.test(val('phone').replace(/[\s()-]/g, '')) ? 'Enter a valid SA mobile number.' : '');
+    var phone = phoneDetails();
+    ok &= setErr('phone', !phone.valid ? 'Enter a valid phone number for the selected country.' : '');
     ok &= setErr('email', !EMAIL.test(val('email')) ? 'Enter a valid email address.' : '');
     ok &= setErr('organisation', val('organisation').length < 2 ? 'Enter your organisation.' : '');
     var selectedInterests = interestBoxes.filter(function (box) { return box.checked; });
@@ -127,9 +168,11 @@
     }
     if (window.API && API.on()) {
       var fd = new FormData(form), btn = form.querySelector('[type=submit]');
-      fd.set('phone', val('phone').replace(/[\s()-]/g, '')); btn.disabled = true;
+      fd.set('phone', phone.number);
+      fd.set('phone_country', phone.country); btn.disabled = true;
       API.post('/auth/register', fd).then(function (r) {
-        btn.disabled = false; form.reset(); updateInterestSummary(); $('interest').open = false;
+        btn.disabled = false; form.reset(); $('phone-country').value = 'ZA';
+        updateInterestSummary(); $('interest').open = false;
         $('reg-ok').textContent = r.message; $('reg-ok').hidden = false; setTimeout(function () { $('reg-ok').hidden = true; }, 12000);
       }).catch(function (err) {
         btn.disabled = false;

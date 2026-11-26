@@ -1,6 +1,6 @@
 # DCC front end — HTML, CSS and JavaScript
 
-Static pages, with no framework and no build step. `css/app.css` is already compiled.
+Static pages, with no framework. `css/app.css` is already compiled; phone validation uses the locally bundled `libphonenumber-js` build.
 
 ## Run
 ```
@@ -14,6 +14,12 @@ window.DCC_CONFIG = {
   apiBase: 'http://127.0.0.1:5000/api',   // where the Flask API runs
   demo: false                              // true = no backend: sample data, no sign-in needed
 };
+```
+
+To rebuild the bundled phone-number validator after changing its entry point or dependency:
+```
+npm install
+npm run build:phone
 ```
 `js/api.js` handles the rest:
 - it sends the sign-in token with every request;

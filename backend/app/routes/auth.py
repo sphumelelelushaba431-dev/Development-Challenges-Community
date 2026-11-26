@@ -10,7 +10,7 @@ from ..db import execute, jdump, now, query
 from ..errors import fail
 from ..nlp.taxonomy import AREAS
 from ..services import full_name, log, me_payload, notify_supervisors
-from ..validators import EMAIL, GENDERS, MEMBER_NO, PHONE, ROLES, TITLES, clean_phone, password_problems, valid_sa_id
+from ..validators import EMAIL, GENDERS, MEMBER_NO, ROLES, TITLES, parse_phone, password_problems, valid_sa_id
 
 bp = Blueprint("auth", __name__, url_prefix="/api")
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
@@ -83,9 +83,9 @@ def register():
             errors[f] = "Enter your %s." % label
     if not valid_sa_id(d.get("id_number")):
         errors["id_number"] = "Enter a valid 13-digit SA ID number."
-    phone = clean_phone(d.get("phone"))
-    if not PHONE.match(phone):
-        errors["phone"] = "Enter a valid SA mobile number."
+    phone = parse_phone(d.get("phone"), d.get("phone_country"))
+    if not phone:
+        errors["phone"] = "Enter a valid phone number for the selected country."
     email = (d.get("email") or "").strip().lower()
     if not EMAIL.match(email):
         errors["email"] = "Enter a valid email address."
@@ -211,9 +211,9 @@ def update_me():
         errors["email"] = "Enter a valid email address."
     elif query("SELECT 1 FROM users WHERE lower(email) = ? AND id <> ?", (email, g.user["id"]), one=True):
         errors["email"] = "Another account uses this email."
-    phone = clean_phone(d.get("phone"))
-    if not (PHONE.match(phone) or (phone.startswith("0") and len(phone) == 10 and phone.isdigit())):
-        errors["phone"] = "Enter a valid South African number."
+    phone = parse_phone(d.get("phone"), d.get("phone_country"))
+    if not phone:
+        errors["phone"] = "Enter a valid phone number for the selected country."
     if len((d.get("org") or d.get("organisation") or "").strip()) < 2:
         errors["org"] = "Enter your organisation."
     interests = _interests(d)
