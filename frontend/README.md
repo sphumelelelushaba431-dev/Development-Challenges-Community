@@ -16,10 +16,11 @@ window.DCC_CONFIG = {
 };
 ```
 
-To rebuild the bundled phone-number validator after changing its entry point or dependency:
+To rebuild the bundled phone-number validator and the country flags used by its picker:
 ```
 npm install
 npm run build:phone
+npm run build:flags
 ```
 `js/api.js` handles the rest:
 - it sends the sign-in token with every request;

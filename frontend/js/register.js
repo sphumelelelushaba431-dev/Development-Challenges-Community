@@ -35,24 +35,151 @@
       valid: !!(parsed && typeof parsed.isValid === 'function' && parsed.isValid())
     };
   }
+  var countries = [], visibleCountries = 60;
+
+  function flagSlot(code) {
+    var slot = document.createElement('span');
+    slot.className = 'phone-flag';
+    var img = document.createElement('img');
+    img.alt = '';
+    img.decoding = 'async';
+    img.src = 'images/flags/' + code.toLowerCase() + '.svg';
+    img.onerror = function () { slot.textContent = code.toUpperCase(); };
+    slot.appendChild(img);
+    return slot;
+  }
+  function updateCountryButton(code) {
+    var item = countries.filter(function (c) { return c.code === code; })[0] || countries[0];
+    if (!item) return;
+    $('phone-country').value = item.code;
+    var value = $('phone-country-value'), label = document.createElement('span');
+    value.textContent = '';
+    value.appendChild(flagSlot(item.code));
+    label.className = 'phone-country-code';
+    label.textContent = item.dial;
+    value.appendChild(label);
+    $('phone-country-button').setAttribute('aria-label', 'Country code: ' + item.name + ', ' + item.dial);
+    Array.prototype.forEach.call($('phone-country-options').querySelectorAll('.phone-country-option'), function (option) {
+      option.setAttribute('aria-selected', option.dataset.country === item.code ? 'true' : 'false');
+    });
+  }
+  function renderCountryOptions(query) {
+    var list = $('phone-country-options'), selected = $('phone-country').value;
+    var q = (query || '').trim().toLowerCase();
+    list.textContent = '';
+    var matches = countries.filter(function (c) { return !q || c.search.indexOf(q) >= 0; });
+    visibleCountries = 60;
+    if (!matches.length) {
+      var empty = document.createElement('div');
+      empty.className = 'phone-country-empty';
+      empty.textContent = 'No countries found';
+      list.appendChild(empty);
+      return [];
+    }
+    matches.slice(0, visibleCountries).forEach(function (c) {
+      var option = document.createElement('button');
+      var text = document.createElement('span');
+      option.type = 'button';
+      option.className = 'phone-country-option';
+      option.dataset.country = c.code;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', c.code === selected ? 'true' : 'false');
+      option.appendChild(flagSlot(c.code));
+      text.textContent = c.name + ' (' + c.dial + ')';
+      option.appendChild(text);
+      list.appendChild(option);
+    });
+    if (matches.length > visibleCountries) {
+      var more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'phone-country-more';
+      more.textContent = 'Show ' + Math.min(60, matches.length - visibleCountries) + ' more';
+      list.appendChild(more);
+    }
+    return matches;
+  }
+  function focusCountryOption(index) {
+    var options = Array.prototype.slice.call($('phone-country-options').querySelectorAll('.phone-country-option'));
+    if (!options.length) return;
+    options[(index + options.length) % options.length].focus();
+  }
+  function closeCountryMenu(focusButton) {
+    $('phone-country-menu').hidden = true;
+    $('phone-country-button').setAttribute('aria-expanded', 'false');
+    if (focusButton) $('phone-country-button').focus();
+  }
+  function openCountryMenu() {
+    var menu = $('phone-country-menu');
+    if (!menu.hidden) return;
+    menu.hidden = false;
+    $('phone-country-button').setAttribute('aria-expanded', 'true');
+    $('phone-country-search').value = '';
+    renderCountryOptions('');
+    $('phone-country-search').focus();
+  }
+  function chooseCountry(code, focusButton) {
+    updateCountryButton(code);
+    closeCountryMenu(focusButton);
+    setErr('phone', '');
+  }
   function fillCountries() {
-    var lib = window.DCCPhone, select = $('phone-country');
-    if (!lib || typeof lib.getCountries !== 'function' || typeof lib.getCountryCallingCode !== 'function') return;
+    var lib = window.DCCPhone;
     var names;
     try { names = new Intl.DisplayNames(['en'], { type: 'region' }); } catch (e) { names = null; }
-    var countries = lib.getCountries().map(function (code) {
-      var name = code;
-      try { name = names && names.of(code) ? names.of(code) : code; } catch (e) { name = code; }
-      return { code: code, name: name + ' (+' + lib.getCountryCallingCode(code) + ')' };
-    }).sort(function (a, b) { return a.name.localeCompare(b.name); });
-    select.textContent = '';
-    countries.forEach(function (item) {
-      var option = document.createElement('option');
-      option.value = item.code;
-      option.textContent = item.name;
-      select.appendChild(option);
+    if (lib && typeof lib.getCountries === 'function' && typeof lib.getCountryCallingCode === 'function') {
+      countries = lib.getCountries().map(function (code) {
+        var name = code, dial = '+' + lib.getCountryCallingCode(code);
+        try { name = names && names.of(code) ? names.of(code) : code; } catch (e) { name = code; }
+        return { code: code, name: name, dial: dial, search: (name + ' ' + code + ' ' + dial).toLowerCase() };
+      }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    } else {
+      countries = [{ code: 'ZA', name: 'South Africa', dial: '+27', search: 'south africa za 27 +27' }];
+    }
+    updateCountryButton('ZA');
+
+    var control = $('phone-country-control'), button = $('phone-country-button'), list = $('phone-country-options'), search = $('phone-country-search');
+    button.addEventListener('click', function () {
+      if ($('phone-country-menu').hidden) openCountryMenu(); else closeCountryMenu(false);
     });
-    select.value = 'ZA';
+    button.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openCountryMenu();
+        if (e.key === 'ArrowDown') focusCountryOption(0);
+        else if (e.key === 'ArrowUp') focusCountryOption(-1);
+        else search.focus();
+      }
+    });
+    search.addEventListener('input', function () { renderCountryOptions(search.value); });
+    search.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); focusCountryOption(0); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        var first = list.querySelector('.phone-country-option');
+        if (first) chooseCountry(first.dataset.country, true);
+      } else if (e.key === 'Escape') { e.preventDefault(); closeCountryMenu(true); }
+    });
+    list.addEventListener('click', function (e) {
+      var option = e.target.closest('.phone-country-option');
+      if (option) { chooseCountry(option.dataset.country, true); return; }
+      if (e.target.closest('.phone-country-more')) {
+        visibleCountries += 60;
+        renderCountryOptions(search.value);
+      }
+    });
+    list.addEventListener('keydown', function (e) {
+      var options = Array.prototype.slice.call(list.querySelectorAll('.phone-country-option'));
+      var current = options.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') { e.preventDefault(); focusCountryOption(current + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); focusCountryOption(current - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); focusCountryOption(0); }
+      else if (e.key === 'End') { e.preventDefault(); focusCountryOption(options.length - 1); }
+      else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (current >= 0) chooseCountry(options[current].dataset.country, true);
+      } else if (e.key === 'Escape') { e.preventDefault(); closeCountryMenu(true); }
+    });
+    document.addEventListener('click', function (e) { if (!control.contains(e.target)) closeCountryMenu(false); });
   }
 
   function setErr(id, msg) {
@@ -171,7 +298,7 @@
       fd.set('phone', phone.number);
       fd.set('phone_country', phone.country); btn.disabled = true;
       API.post('/auth/register', fd).then(function (r) {
-        btn.disabled = false; form.reset(); $('phone-country').value = 'ZA';
+        btn.disabled = false; form.reset(); updateCountryButton('ZA'); closeCountryMenu(false);
         updateInterestSummary(); $('interest').open = false;
         $('reg-ok').textContent = r.message; $('reg-ok').hidden = false; setTimeout(function () { $('reg-ok').hidden = true; }, 12000);
       }).catch(function (err) {

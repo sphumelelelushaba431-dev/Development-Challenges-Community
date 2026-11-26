@@ -106,9 +106,20 @@
         <div class="fld">
           <label for="phone" class="label">Phone Number <span class="text-red-600">*</span></label>
           <div class="phone-row">
-            <select id="phone-country" name="phone_country" class="input phone-country" aria-label="Country code">
-              <option value="ZA">South Africa (+27)</option>
-            </select>
+            <div id="phone-country-control" class="phone-country-wrap">
+              <input type="hidden" id="phone-country" name="phone_country" value="ZA">
+              <button type="button" id="phone-country-button" class="input phone-country" aria-label="Country code: South Africa, +27" aria-haspopup="listbox" aria-controls="phone-country-menu" aria-expanded="false">
+                <span id="phone-country-value" class="phone-country-value">
+                  <span class="phone-flag"><img src="images/flags/za.svg" alt=""></span>
+                  <span class="phone-country-code">+27</span>
+                </span>
+                <svg class="phone-country-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div id="phone-country-menu" class="phone-country-menu" hidden>
+                <input id="phone-country-search" type="search" class="input phone-country-search" placeholder="Search country" aria-label="Search country" autocomplete="off">
+                <div id="phone-country-options" class="phone-country-options" role="listbox" aria-label="Countries"></div>
+              </div>
+            </div>
             <input id="phone" name="phone" type="tel" class="input phone-number" placeholder="e.g. 71 234 5678" autocomplete="tel-national">
           </div>
           <span class="err" id="phone-err"></span>
