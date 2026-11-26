@@ -2,7 +2,7 @@
 notifications and activity."""
 from datetime import datetime, timezone
 
-from flask import current_app
+from flask import current_app, g, has_request_context, request
 
 from . import mcda
 from .db import execute, jdump, jload, now, query
@@ -148,11 +148,65 @@ def notify_supervisors(kind, sender, text, about=""):
         notify(s["id"], kind, sender, text, about)
 
 
-def log(who, text, kind="info"):
-    execute("INSERT INTO activity (who, text, kind) VALUES (?,?,?)", (who, text, kind))
+def client_ip():
+    if not has_request_context():
+        return ""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    return (forwarded.split(",")[0].strip() if forwarded else request.remote_addr) or ""
+
+
+def log(who, text, kind="info", action="", actor=None, duration=None, session_id=None):
+    """Write one audit-log entry: what was done (text, action), by whom (actor), when (now) and how long (duration, seconds).
+    The actor defaults to the signed-in member of the current request."""
+    if actor is None and has_request_context():
+        actor = g.get("user")
+    if session_id is None and has_request_context():
+        session_id = g.get("session_id")
+    execute("""INSERT INTO activity (who, text, kind, action, actor_id, actor_no, actor_role, session_id, duration, ip, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (who, text, kind, action, actor["id"] if actor else None, actor["member_no"] if actor else "",
+             actor["role"] if actor else "", session_id, duration, client_ip(), now()))
+
+
+# ---------- sign-in sessions ----------
+def start_session(user):
+    agent = request.headers.get("User-Agent", "")[:200] if has_request_context() else ""
+    return execute("INSERT INTO sessions (user_id, started_at, last_seen, ip, agent) VALUES (?,?,?,?,?)",
+                   (user["id"], now(), now(), client_ip(), agent))
+
+
+def session_seconds(s):
+    """Length of a sign-in session: start → logout, or start → last activity while it is still open."""
+    end = s["ended_at"] or s["last_seen"]
+    return max(0, seconds_between(s["started_at"], end))
+
+
+def end_session(sid, reason="logout"):
+    s = query("SELECT * FROM sessions WHERE id = ?", (sid,), one=True)
+    if not s or s["ended_at"]:
+        return s, None
+    execute("UPDATE sessions SET ended_at = ?, last_seen = ?, end_reason = ? WHERE id = ?", (now(), now(), reason, sid))
+    s = query("SELECT * FROM sessions WHERE id = ?", (sid,), one=True)
+    return s, session_seconds(s)
+
+
+def end_user_sessions(user_id, reason):
+    for s in query("SELECT id FROM sessions WHERE user_id = ? AND ended_at IS NULL", (user_id,)):
+        end_session(s["id"], reason)
 
 
 # ---------- misc ----------
+def _ts(value):
+    return datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+
+
+def seconds_between(start, end):
+    try:
+        return int((_ts(end) - _ts(start)).total_seconds())
+    except (TypeError, ValueError):
+        return 0
+
+
 def days_ago(ts):
     try:
         t = datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)

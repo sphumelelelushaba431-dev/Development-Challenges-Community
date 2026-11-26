@@ -44,7 +44,15 @@ The password for every account is **`Demo@1234`**.
 | DCC00020, DCC00021 | Waiting for approval | — |
 | DCC00022 | Locked after 3 failed logins | — |
 
-New registrations stay **pending** until an administrator approves them. To start again with fresh demo data:
+New members can log in **straight after registering** with their Member ID (or e-mail) and the password they chose, and they receive a confirmation e-mail with their Member ID and details. To make new accounts wait for a supervisor's approval instead, set `REQUIRE_APPROVAL=true` (see below).
+
+### Confirmation e-mails (SMTP)
+Copy `backend/.env.example` to `backend/.env` and fill in your SMTP details (Gmail: `smtp.gmail.com`, port 587, and an App Password). Restart the backend. Without `MAIL_SERVER` the e-mails are saved to `backend/instance/outbox/` instead of being sent, and the registration message says so.
+
+### Audit log (supervisors)
+The **Audit log** button manages members and shows every recorded activity — what was done, by whom, when and how long:
+- **Members:** status, last sign-in, total time signed in, and actions (Approve / Decline, Lock / Unlock, Activity).
+- **Activity:** registrations, sign-ins and sign-outs (with session length), failed logins and lockouts, password changes, challenge submissions, reviews (with time waited), progress, completions, meetings and e-mails. Searchable and filterable. To start again with fresh demo data:
 ```
 cd backend
 flask --app run seed
@@ -90,7 +98,7 @@ All weights, thresholds and limits are in `backend/app/config.py`. `GET /api/adm
 
 ## Main features
 - **Home:** Register, Login and the public dashboard. The public dashboard has impact metrics, a progress strip, previous solutions, submissions by area and a date-range calendar.
-- **Registration:** Terms and Conditions + POPIA consent step, SA ID / phone / password checks, and administrator approval.
+- **Registration:** Terms and Conditions + POPIA consent step, SA ID / phone / password checks, immediate login and a confirmation e-mail.
 - **Representative:** submits challenges (the funding question is required), answers "Supervisors Attention" requests, and follows Progress Tracking.
 - **Supervisor:**
   - reviews challenges (approve / request information / reject)
@@ -109,5 +117,5 @@ More detail: `backend/README.md` (API and tests) and `frontend/README.md` (pages
 ## Before going live
 - Set a strong `SECRET_KEY` and restrict `CORS_ORIGINS` to your front-end address (environment variables).
 - Serve the API with a production server (for example `gunicorn "run:app"` on Linux, or `waitress-serve --call app:create_app` on Windows) behind HTTPS.
-- Send the password-reset link by e-mail. The API creates the token; e-mail sending is not included.
+- Configure SMTP in `backend/.env` so confirmation e-mails are delivered. (The password-reset link is still only logged; sending it is not included yet.)
 - Replace `frontend/images/home-bg.jpg` with a licensed photo. The supplied one has watermarks.

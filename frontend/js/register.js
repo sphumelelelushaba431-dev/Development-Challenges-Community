@@ -300,7 +300,11 @@
       API.post('/auth/register', fd).then(function (r) {
         btn.disabled = false; form.reset(); updateCountryButton('ZA'); closeCountryMenu(false);
         updateInterestSummary(); $('interest').open = false;
-        $('reg-ok').textContent = r.message; $('reg-ok').hidden = false; setTimeout(function () { $('reg-ok').hidden = true; }, 12000);
+        // Stays on screen: the Member ID is needed to log in. "Log in now" fills it in on the login page.
+        var ok = $('reg-ok'), esc = function (t) { var d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
+        ok.innerHTML = '<p>' + esc(r.message) + '</p>' + (r.status === 'active'
+          ? '<p class="mt-2"><a class="font-semibold text-green-900 underline" href="login.html?member=' + encodeURIComponent(r.member_no) + '">Log in now</a></p>' : '');
+        ok.hidden = false; ok.scrollIntoView({ block: 'nearest' });
       }).catch(function (err) {
         btn.disabled = false;
         var map = { first_name: 'first-name', id_number: 'id-number', area_of_interest: 'interest', confirm_password: 'confirm' };
