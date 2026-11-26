@@ -9,8 +9,8 @@ from ..auth import login_required, make_token, read_token
 from ..db import execute, jdump, now, query
 from ..errors import fail
 from ..nlp.taxonomy import AREAS
-from ..services import full_name, log, me_payload, notify_supervisors
-from ..validators import EMAIL, GENDERS, MEMBER_NO, ROLES, TITLES, parse_phone, password_problems, valid_sa_id
+from ..services import full_name, log, me_payload, notify_admins
+from ..validators import ACCOUNT_ROLES, EMAIL, GENDERS, MEMBER_NO, ROLES, TITLES, parse_phone, password_problems, valid_sa_id
 
 bp = Blueprint("auth", __name__, url_prefix="/api")
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
@@ -60,7 +60,7 @@ def _interests(d):
 
 
 def _next_member_no():
-    row = query("SELECT member_no FROM users ORDER BY id DESC LIMIT 1", one=True)
+    row = query("SELECT member_no FROM users ORDER BY member_no DESC LIMIT 1", one=True)
     n = int(row["member_no"][3:]) + 1 if row else 1
     while query("SELECT 1 FROM users WHERE member_no = ?", ("DCC%05d" % n,), one=True):
         n += 1
@@ -124,9 +124,9 @@ def register():
              d["organisation"].strip(), interest, jdump(interests), d["address"].strip(), photo, generate_password_hash(d["password"]), now()))
     name = "%s %s %s" % (d["title"], d["first_name"].strip(), d["surname"].strip())
     log(name, "registered as a %s — awaiting approval." % role.title(), "warn")
-    notify_supervisors("alert", name, "New %s registration waiting for approval." % role, member_no)
+    notify_admins("alert", name, "New %s registration waiting for approval." % role, member_no)
     return jsonify({"member_no": member_no, "status": "pending",
-                    "message": "Registration received. Your member number is %s. You can log in once a supervisor approves your account." % member_no}), 201
+                    "message": "Registration received. Your member number is %s. You can log in once the administrator approves your account." % member_no}), 201
 
 
 @bp.post("/auth/login")
@@ -142,20 +142,20 @@ def login():
     if not u:
         fail("The Member ID or password is incorrect.", 401)
     if u["status"] == "locked":
-        fail("Your account is locked after too many failed attempts. Contact a supervisor.", 403)
+        fail("Your account is locked after too many failed attempts. Contact the administrator.", 403)
     if not check_password_hash(u["password_hash"], d["password"]):
         tries = u["failed_logins"] + 1
         if tries >= current_app.config["MAX_FAILED_LOGINS"]:
             execute("UPDATE users SET failed_logins = ?, status = 'locked', locked_at = ? WHERE id = ?", (tries, now(), u["id"]))
             log("System", "%d failed login attempts for %s — account locked." % (tries, u["member_no"]), "bad")
-            fail("Too many failed attempts. Your account is now locked; contact a supervisor.", 403)
+            fail("Too many failed attempts. Your account is now locked; contact the administrator.", 403)
         execute("UPDATE users SET failed_logins = ? WHERE id = ?", (tries, u["id"]))
         fail("The Member ID or password is incorrect.", 401)
     if u["status"] == "pending":
-        fail("Your account is waiting for supervisor approval.", 403)
+        fail("Your account is waiting for administrator approval.", 403)
     if u["status"] == "rejected":
-        fail("Your registration was not approved. Contact a supervisor.", 403)
-    if u["role"] not in ROLES:
+        fail("Your registration was not approved. Contact the administrator.", 403)
+    if u["role"] not in ACCOUNT_ROLES:
         fail("This account cannot access the workspace.", 403)
     execute("UPDATE users SET failed_logins = 0 WHERE id = ?", (u["id"],))
     home = "workspace.html"   # one role-gated workspace for every member

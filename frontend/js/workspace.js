@@ -9,14 +9,17 @@
   var role = null, ME = null, D = null, MEET = null;
   var active = null, sel = null;
 
-  var ALL_NAV = [['submit', 'Submit'], ['solve', 'Solve'], ['track', 'Track'], ['meetings', 'Meeting']];
+  var ALL_NAV = [['submit', 'Submit'], ['solve', 'Solve'], ['track', 'Track'], ['meetings', 'Meeting'], ['audit', 'Audit log']];
+  // "Audit log" is shown to everyone but only the administrator can open it: it is where user accounts are managed.
   var ALLOWED = {
     student:        ['solve', 'track'],
     representative: ['submit', 'track'],
-    supervisor:     ['submit', 'solve', 'track', 'meetings']
+    supervisor:     ['submit', 'solve', 'track', 'meetings'],
+    admin:          ['audit']
   };
   var canUse = function (key) { return (ALLOWED[role] || []).indexOf(key) > -1; };
-  var TITLES = { solve: 'Solve', submit: 'Submit', track: 'Track', meetings: 'Meeting' };
+  var TITLES = { solve: 'Solve', submit: 'Submit', track: 'Track', meetings: 'Meeting', audit: 'Audit log' };
+  var audit = { q: '', kind: '' };
   var LABEL = {
     'Unallocated': 'Open', 'Approved': 'Open', 'Submitted': 'Review', 'Under Review': 'Review',
     'Pending Information': 'More details', 'Allocated': 'In progress', 'In Progress': 'In progress',
@@ -58,6 +61,7 @@
     return '<button data-do="' + kind + '"' + (action ? ' data-action="' + action + '"' : '') +
       ' class="btn py-2 ' + (style === 'primary' ? 'btn-primary' : style === 'danger' ? 'border-red-200 text-red-700 hover:bg-red-50' : '') + '">' + text + '</button>';
   };
+  var money = function (n) { return 'R ' + (+n).toLocaleString('en-ZA', { maximumFractionDigits: 2 }); };
   var cancelBtn = '<button data-cancel class="btn py-2">Cancel</button>';
   var formCard = function (title, inner, actions) {
     return U.card({ id: 'wsform', title: title, body: '<div class="mt-2">' + inner + '</div><div class="ws-form-actions">' + actions + '</div>' });
@@ -65,7 +69,7 @@
   var panelHead = function (key, desc) {
     var t = TITLES[key] || 'Workspace', pt = document.getElementById('page-title');
     if (pt) { pt.textContent = t; document.title = t + ' — Development Challenges Community'; }
-    return '<div class="ws-head"><h2>' + esc(t) + '</h2><p>' + desc + '</p></div>';
+    return '';   // the panel name is already shown in the top bar, so no heading block (and no empty space) above the cards
   };
   var shellCfg = function () { return { roleLabel: ME.roleLabel, name: ME.name, initials: ME.initials, meta: ME.meta, profile: ME.profile }; };
 
@@ -76,14 +80,14 @@
       if (!API.token() || !u || !ALLOWED[u.role]) { location.replace('login.html'); return; }
       role = u.role;
       API.boot(role).then(function (data) {
-        D = data; ME = D.me; normalize(); U.shell(shellCfg()); U.serverNotes(D.notes, noteOpener); renderNav(); renderEmpty();
+        D = data; ME = D.me; normalize(); U.shell(shellCfg()); U.serverNotes(D.notes, noteOpener); renderNav(); if (role === 'admin') setActive('audit', true); else renderEmpty();
       }).catch(API.fail);
       return;
     }
     try { role = localStorage.getItem('dcc-demo-role'); } catch (e) {}
     if (!role || !ALLOWED[role]) { location.replace('login.html'); return; }
     D = demoData(role); ME = D.me;
-    U.shell(shellCfg()); U.notes(demoNotes()); renderNav(); renderEmpty();
+    U.shell(shellCfg()); U.notes(demoNotes()); renderNav(); if (role === 'admin') setActive('audit', true); else renderEmpty();
   }
   function normalize() {
     API.dates(D.events || [], ['date']);
@@ -95,10 +99,13 @@
     if (role === 'representative') API.dates(D.subs || [], ['due', 'created', 'completed']);
     if (role === 'supervisor') API.dates(D.challenges || [], ['due', 'created', 'completed']);
     API.dates(D.pending || [], ['when']);
+    API.dates(D.members || [], ['when']);
+    API.dates(D.audit || [], ['at']);
   }
   function noteOpener(n) {
     if (n.kind === 'meeting') return function () { showMeeting(n.ref || n.about); };
     if (n.kind === 'assign' && role === 'student') return function () { setActive('solve', true); };
+    if (n.kind === 'alert' && role === 'admin') return function () { setActive('audit', true); };
     if (n.kind === 'alert') return function () { setActive('submit', true); };
     return null;
   }
@@ -117,7 +124,7 @@
     document.getElementById('ws-nav').innerHTML = ALL_NAV.map(function (b) {
       var ok = canUse(b[0]);
       return '<button class="ws-btn' + (active === b[0] ? ' active' : '') + '" data-nav="' + b[0] + '"' +
-        (ok ? ' aria-pressed="' + (active === b[0]) + '"' : ' disabled aria-disabled="true"') +
+        (ok ? ' aria-pressed="' + (active === b[0]) + '"' : ' disabled aria-disabled="true"' + (b[0] === 'audit' ? ' title="Only the administrator can open the audit log"' : '')) +
         '>' + esc(b[1]) + '</button>';
     }).join('');
   }
@@ -160,6 +167,7 @@
     else if (role === 'supervisor' && active === 'submit') html = supSubmit();
     else if (role === 'supervisor' && active === 'solve') html = supSolve();
     else if (role === 'supervisor' && active === 'track') html = supTrack();
+    else if (role === 'admin' && active === 'audit') html = auditPanel();
     else if (active === 'meetings') html = meetingsPanel();
     document.getElementById('content').innerHTML = html;
     bindPanel();
@@ -211,19 +219,25 @@
       body: U.list(info.map(function (c) {
         return '<div class="min-w-0 flex-1">' + U.cell(c.title, esc(c.request || ''), 'warn') + '</div><button data-pick="respond|' + esc(c.id) + '" class="btn btn-sm w-28 shrink-0">Respond</button>';
       }), 'Nothing needs your input.') });
-    html += challengeForm(true);
+    html += challengeForm();
     if (sel && sel.kind === 'respond') html += respondForm();
     return html;
   }
-  function challengeForm(withFunding) {
+  function challengeForm() {
     var min = U.isoDay(new Date(Date.now() + U.DAY));
-    return U.card({ id: 'newch', title: 'Submit a challenge', body:
+    // No visible card heading (the top bar already says "Submit"); the label keeps the form named for screen readers.
+    return '<section class="card2" aria-label="Submit a challenge">' +
       '<div class="ws-field"><label class="label" for="f-title">Challenge title <span class="text-red-600">*</span></label><input id="f-title" class="input"><span id="f-title-err" class="err"></span></div>' +
       '<div class="ws-field"><label class="label" for="f-due">Deadline <span class="text-red-600">*</span></label><input id="f-due" type="date" min="' + min + '" class="input"><span id="f-due-err" class="err"></span></div>' +
       '<div class="ws-field"><label class="label" for="f-desc">Description <span class="text-red-600">*</span></label><textarea id="f-desc" rows="3" class="input"></textarea><span id="f-desc-err" class="err"></span></div>' +
-      '<div class="ws-field"><label class="label" for="f-detail">More detail <span class="ws-hint">(optional)</span></label><textarea id="f-detail" rows="3" class="input"></textarea></div>' +
-      (withFunding ? '<div class="ws-field"><span class="label">Will your organisation fund this project? <span class="text-red-600">*</span></span><div class="ws-2col"><label class="ws-opt"><input type="radio" name="f-fund" value="yes">Yes, we will fund it</label><label class="ws-opt"><input type="radio" name="f-fund" value="no">No, we can\'t fund it</label></div><span id="f-fund-err" class="err"></span></div>' : '') +
-      '<div class="ws-form-actions">' + btn('Submit challenge', 'newchallenge', null, 'primary') + '</div>' });
+      // Funding section: required for everyone who submits. "Yes" asks for the budget amount.
+      '<div class="ws-field"><label class="label" for="f-fund">Funding <span class="text-red-600">*</span></label>' +
+      '<select id="f-fund" class="input"><option value="" selected disabled>Select…</option><option value="yes">Yes</option><option value="no">No</option></select><span id="f-fund-err" class="err"></span>' +
+      '<div id="f-budget-wrap" class="mt-3" hidden><label class="label" for="f-budget">Budget amount (R) <span class="text-red-600">*</span></label>' +
+      '<div class="relative"><span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold text-slate-500">R</span>' +
+      '<input id="f-budget" type="number" inputmode="decimal" min="1" step="0.01" class="input" style="padding-left:28px"></div><span id="f-budget-err" class="err"></span></div>' +
+      '</div>' +
+      '<div class="ws-form-actions">' + btn('Submit challenge', 'newchallenge', null, 'primary') + '</div></section>';
   }
   function respondForm() {
     var c = findCh(sel.id); if (!c) return '';
@@ -244,8 +258,50 @@
 
   /* ---------- supervisor ---------- */
   function supSubmit() {
-    return panelHead('submit', 'Submit a challenge and approve new members.') +
-      challengeForm(false) + '<div class="ws-sec-title mt-6">Approvals</div>' + supApprovals(false);
+    return panelHead('submit', 'Submit a challenge for review.') + challengeForm();
+  }
+
+  /* ---------- administrator: user accounts + audit log ---------- */
+  function adminAccounts() {
+    var members = D.members || [];
+    var rows = members.map(function (m) {
+      return [U.cell(m.name, esc(m.id) + ' · ' + esc(m.email || '')), esc(m.role), esc(m.org || '—'), statusBadge(m.status)];
+    });
+    return supApprovals(true) +
+      U.card({ id: 'mem', title: 'All members', count: members.length,
+        body: U.table([['Member', 'minmax(0,1fr)'], ['Role', '128px'], ['Organisation', 'minmax(0,180px)'], ['Status', '104px']], rows, 'No members yet.') });
+  }
+  function statusBadge(s) {
+    var cls = { active: 'bg-green-50 text-green-700 ring-green-600/15', pending: 'bg-amber-50 text-amber-800 ring-amber-600/20',
+      locked: 'bg-orange-50 text-orange-700 ring-orange-600/15', rejected: 'bg-red-50 text-red-700 ring-red-600/15' }[s] || 'bg-slate-50 text-slate-500 ring-slate-400/20';
+    return '<span class="badge ' + cls + '">' + esc(s ? s.charAt(0).toUpperCase() + s.slice(1) : '—') + '</span>';
+  }
+  var AUDIT_KIND = { ok: ['Success', '#16a34a'], bad: ['Rejected / failed', '#dc2626'], warn: ['Needs attention', '#eab308'], info: ['Information', '#2b4de0'] };
+  function auditWhen(at) {
+    if (!(at instanceof Date) || isNaN(at)) return '—';
+    return U.fmt(at) + ' ' + String(at.getHours()).padStart(2, '0') + ':' + String(at.getMinutes()).padStart(2, '0');
+  }
+  function auditPanel() {
+    var all = D.audit || [], q = audit.q.toLowerCase();
+    var shown = all.filter(function (a) {
+      return (!audit.kind || a.kind === audit.kind) && (!q || (a.who + ' ' + a.text).toLowerCase().indexOf(q) > -1);
+    });
+    var rows = shown.map(function (a) {
+      var k = AUDIT_KIND[a.kind] || AUDIT_KIND.info;
+      return ['<span class="tabular-nums text-slate-700">' + esc(auditWhen(a.at)) + '</span>',
+        '<b class="font-semibold text-slate-900">' + esc(a.who) + '</b>',
+        '<span class="text-slate-700">' + esc(a.text) + '</span>',
+        '<span class="inline-flex items-center gap-1.5 text-[12.5px] text-slate-600"><i class="inline-block size-2 shrink-0 rounded-full" style="background:' + k[1] + '"></i>' + esc(k[0]) + '</span>'];
+    });
+    var opts = '<option value="">All types</option>' + Object.keys(AUDIT_KIND).map(function (k) {
+      return '<option value="' + k + '"' + (audit.kind === k ? ' selected' : '') + '>' + AUDIT_KIND[k][0] + '</option>';
+    }).join('');
+    return adminAccounts() + panelHead('audit', 'Every recorded action in the system: registrations, approvals, logins that locked an account, reviews and more. Only the administrator can see this.') +
+      U.card({ id: 'aud', title: 'Audit log', count: shown.length, body:
+        '<div class="ws-2col ws-field mt-2"><div><label class="label" for="a-q">Search</label><input id="a-q" class="input" placeholder="Member, name or action" value="' + esc(audit.q) + '"></div>' +
+        '<div><label class="label" for="a-k">Type</label><select id="a-k" class="input">' + opts + '</select></div></div>' +
+        U.table([['When', '150px'], ['Who', 'minmax(0,180px)'], ['Action', 'minmax(0,1fr)'], ['Type', '150px']], rows, all.length ? 'No entries match your search.' : 'The audit log is empty.') +
+        '<div class="ws-form-actions"><button data-do="auditrefresh" class="btn py-2">Refresh</button></div>' });
   }
   function supApprovals(withHead) {
     var pend = D.pending || [], locked = D.locked || [];
@@ -257,35 +313,54 @@
     var lockRows = locked.map(function (l) {
       return '<div class="min-w-0 flex-1">' + U.cell(l.name, l.id + ' · ' + esc(l.why), 'warn') + '</div><button data-pick="unlock|' + esc(l.id) + '" class="btn btn-sm w-28 shrink-0">Unlock</button>';
     });
-    var act = (D.activity || []).slice(0, 12);
+    var act = (D.audit || D.activity || []).slice(0, 8);
     var DOT = { ok: '#16a34a', bad: '#dc2626', warn: '#eab308', info: '#2b4de0' };
     var actRows = act.map(function (a) {
       return '<i class="inline-block size-2 shrink-0 rounded-full" style="background:' + (DOT[a.kind] || DOT.info) + '"></i>' +
         '<div class="min-w-0 flex-1 truncate text-slate-700"><b class="font-semibold text-slate-900">' + esc(a.who) + '</b> ' + esc(a.text) + '</div>' +
         '<span class="shrink-0 text-[12px] text-slate-500">' + (a.ago ? a.ago + 'd ago' : 'today') + '</span>';
     });
-    var html = (withHead === false ? '' : panelHead('approvals', 'Approve or decline new accounts.')) +
+    var html = (withHead === false ? '' : panelHead('audit', 'Approve or decline new registrations, unlock locked accounts and see every member.')) +
       U.card({ id: 'ap', title: 'Accounts awaiting approval', count: pend.length, body: U.table(cols, rows, 'No accounts waiting.') }) +
       '<div class="ws-grid">' +
       U.card({ id: 'lock', title: 'Locked accounts', count: locked.length, tone: 'warn', countRight: true, body: U.list(lockRows, 'No locked accounts.') }) +
       U.card({ id: 'act', title: 'Recent activity', body: U.list(actRows, 'No activity yet.') }) + '</div>';
-    if (sel && (sel.kind === 'account' || sel.kind === 'unlock')) html += approvalForm();
     return html;
   }
-  function approvalForm() {
-    if (sel.kind === 'account') {
-      var p = (D.pending || []).filter(function (x) { return x.id === sel.id; })[0]; if (!p) return '';
-      return formCard('Review account — ' + p.id,
-        '<dl class="ws-dl mb-3"><div><dt>Name</dt><dd>' + esc(p.name) + '</dd></div><div><dt>Role</dt><dd>' + esc(p.role) + '</dd></div>' +
-        '<div><dt>Organisation</dt><dd>' + esc(p.org) + '</dd></div><div><dt>Email</dt><dd>' + esc(p.email) + '</dd></div>' +
-        '<div><dt>Registered</dt><dd>' + U.fmt(p.when) + '</dd></div></dl>' +
-        '<div class="ws-field"><label class="label" for="f-reason">Reason <span class="ws-hint">(required to decline)</span></label><textarea id="f-reason" rows="2" class="input"></textarea><span id="f-reason-err" class="err"></span></div>',
-        cancelBtn + btn('Decline', 'account', 'reject', 'danger') + btn('Approve & activate', 'account', 'approve', 'primary'));
-    }
-    var l = (D.locked || []).filter(function (x) { return x.id === sel.id; })[0]; if (!l) return '';
-    return formCard('Unlock account — ' + l.id,
-      '<p>Unlock <b>' + esc(l.name) + '</b>? They will be able to sign in again.</p>',
-      cancelBtn + btn('Unlock account', 'unlock', null, 'primary'));
+  /* Review / Unlock open in a pop-up window in the middle of the screen, so the buttons are always visible. */
+  function accountError(id, msg) {
+    var e = document.getElementById(id + '-err'); if (e) e.textContent = msg || '';
+    var f = document.getElementById(id); if (f) f.classList.toggle('invalid', !!msg);
+  }
+  function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+  function accountDone(msg) { closeModal(); U.toast(msg, 'ok'); reload(); }
+  function reviewAccount(id) {
+    var p = (D.pending || []).filter(function (x) { return x.id === id; })[0]; if (!p) return;
+    var row = function (k, v) { return '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>'; };
+    var send = function (action) {
+      var reason = val('f-reason'); accountError('f-reason', '');
+      if (action === 'reject' && reason.length < 3) { accountError('f-reason', 'Give a reason for declining.'); return false; }
+      if (!live) { D.pending = D.pending.filter(function (x) { return x.id !== id; }); accountDone(action === 'approve' ? p.name + ' approved.' : p.name + ' declined.'); return false; }
+      API.post('/approvals/users/' + encodeURIComponent(id) + '/' + action, action === 'reject' ? { reason: reason } : {})
+        .then(function (r) { accountDone(r.message); })
+        .catch(function (er) { API.fieldErrors(er, { reason: 'f-reason' }); API.fail(er); });
+      return false;   // stay open until the server answers
+    };
+    U.modal('Review account — ' + p.id,
+      '<dl class="ws-dl mb-3">' + row('Name', esc(p.name)) + row('Role', esc(p.role)) + row('Organisation', esc(p.org)) +
+        row('Email', esc(p.email)) + row('Registered', U.fmt(p.when)) + '</dl>' +
+      '<div class="ws-field"><label class="label" for="f-reason">Reason <span class="ws-hint">(required to decline)</span></label><textarea id="f-reason" rows="2" class="input"></textarea><span id="f-reason-err" class="err"></span></div>',
+      [{ label: 'Cancel' }, { label: 'Decline', danger: true, onClick: function () { return send('reject'); } },
+       { label: 'Approve &amp; activate', primary: true, onClick: function () { return send('approve'); } }]);
+  }
+  function unlockAccount(id) {
+    var l = (D.locked || []).filter(function (x) { return x.id === id; })[0]; if (!l) return;
+    U.modal('Unlock account — ' + l.id, '<p>Unlock <b>' + esc(l.name) + '</b> (' + esc(l.why) + ')? They will be able to sign in again.</p>',
+      [{ label: 'Cancel' }, { label: 'Unlock account', primary: true, onClick: function () {
+        if (!live) { D.locked = D.locked.filter(function (x) { return x.id !== id; }); accountDone(l.name + ' unlocked.'); return false; }
+        API.post('/approvals/users/' + encodeURIComponent(id) + '/unlock').then(function (r) { accountDone(r.message); }).catch(API.fail);
+        return false;
+      } }]);
   }
   function supSolve() {
     var all = D.challenges || [];
@@ -311,7 +386,8 @@
     var c = findCh(sel.id); if (!c) return '';
     return formCard('Review ' + c.id,
       '<div class="mb-3"><div class="font-semibold">' + esc(c.title) + '</div><div class="text-xs text-slate-500">Submitted by ' + esc(c.by || '') + ' · due ' + U.fmt(c.due) + '</div>' +
-      (c.funded !== undefined && c.funded !== 'none' ? '<div class="mt-1.5">' + U.funding(c.funded) + '</div>' : '') +
+      (c.funded !== undefined && c.funded !== 'none' ? '<div class="mt-1.5">' + U.funding(c.funded) +
+        (c.funded === true && c.budget ? ' <span class="ml-1 text-[12.5px] font-semibold text-slate-700">Budget: ' + esc(money(c.budget)) + '</span>' : '') + '</div>' : '') +
       '<p class="ws-note mt-2">' + esc(c.desc || '') + '</p></div>' +
       '<div class="ws-field"><label class="label" for="f-comment">Comment <span class="ws-hint">(required to reject or request more detail)</span></label><textarea id="f-comment" rows="3" class="input"></textarea><span id="f-comment-err" class="err"></span></div>',
       cancelBtn + btn('Reject', 'review', 'reject', 'danger') + btn('Request more detail', 'review', 'request_info') + btn('Approve', 'review', 'approve', 'primary'));
@@ -332,7 +408,7 @@
   function meetingsPanel() {
     var mine = (MEET && MEET.meetings) || [];
     var rows = mine.map(function (m) {
-      return '<div class="ws-meet"><span class="lab">' + esc(m.mode || m.venue || '') + '</span>' +
+      return '<div class="ws-meet"><span class="lab" title="' + esc(m.venue || m.mode || '') + '">' + esc(m.venue || m.mode || '') + '</span>' +
         '<div class="min-w-0 flex-1"><div class="truncate font-semibold text-slate-900">' + esc(m.title) + (m.cid ? ' <span class="font-normal text-slate-500">· ' + m.cid + '</span>' : '') + '</div>' +
         '<div class="truncate text-[12.5px] text-slate-600">' + esc(U.meetWhen(m)) + '</div></div>' +
         '<button data-mopen="' + esc(m.id) + '" class="btn btn-sm shrink-0">Details</button>' +
@@ -346,7 +422,7 @@
   function bookingForm() {
     var open = (D.challenges || []).filter(function (c) { return OPEN.indexOf(c.status) > -1; });
     var times = []; for (var t = 8 * 60; t <= 17 * 60; t += 30) times.push(U.hhmm(t));
-    return U.card({ id: 'book', title: 'Schedule a meeting', body:
+    return '<section class="card2" aria-label="Schedule a meeting">' +   // no visible heading; label kept for screen readers
       '<div class="ws-field"><label class="label" for="m-c">Challenge <span class="text-red-600">*</span></label><select id="m-c" class="input">' +
       open.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.title) + ' (' + esc(c.id) + ')</option>'; }).join('') +
       '</select><span id="m-c-err" class="err"></span></div>' +
@@ -354,9 +430,9 @@
       '<div class="ws-2col ws-field"><div><label class="label" for="m-d">Date <span class="text-red-600">*</span></label><input id="m-d" type="date" min="' + U.isoDay() + '" value="' + U.workday(1) + '" class="input"><span id="m-d-err" class="err"></span></div>' +
       '<div class="ws-2col"><div><label class="label" for="m-s">Start</label><select id="m-s" class="input">' + times.map(function (x) { return '<option' + (x === '10:00' ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select><span id="m-s-err" class="err"></span></div>' +
       '<div><label class="label" for="m-m">Length</label><select id="m-m" class="input"><option value="30">30 min</option><option value="60" selected>1 hour</option><option value="90">1½ hours</option><option value="120">2 hours</option></select></div></div></div>' +
-      '<div class="ws-field"><span class="label">Mode <span class="text-red-600">*</span></span><div class="ws-2col"><label class="ws-opt"><input type="radio" name="m-mode" value="Online" checked>Online</label><label class="ws-opt"><input type="radio" name="m-mode" value="In person">In person</label></div><span id="m-mode-err" class="err"></span></div>' +
+      '<div class="ws-field"><label class="label" for="m-v">Venue <span class="text-red-600">*</span></label><input id="m-v" class="input" maxlength="120"><span id="m-v-err" class="err"></span></div>' +
       '<div class="ws-field"><label class="label" for="m-a">Agenda <span class="ws-hint">(optional)</span></label><textarea id="m-a" rows="2" class="input"></textarea></div>' +
-      '<div class="ws-form-actions">' + btn('Schedule meeting', 'bookmeeting', null, 'primary') + '</div>' });
+      '<div class="ws-form-actions">' + btn('Schedule meeting', 'bookmeeting', null, 'primary') + '</div></section>';
   }
 
   /* ---------- read-only detail ---------- */
@@ -375,11 +451,31 @@
   function bindPanel() {
     var pct = document.getElementById('f-pct');
     if (pct) pct.addEventListener('input', function () { document.getElementById('f-pct-out').textContent = this.value + '%'; });
+    // "Yes, we will fund it" reveals the budget field; "No" hides and clears it
+    var ff = document.getElementById('f-fund');
+    if (ff) ff.addEventListener('change', function () {
+      var yes = this.value === 'yes', b = document.getElementById('f-budget');
+      document.getElementById('f-budget-wrap').hidden = !yes; setErr('f-fund', '');
+      if (yes) b.focus(); else { b.value = ''; setErr('f-budget', ''); }
+    });
+    var fb = document.getElementById('f-budget'); if (fb) fb.addEventListener('input', function () { setErr('f-budget', ''); });
+    var aq = document.getElementById('a-q'), ak = document.getElementById('a-k');
+    if (aq) aq.addEventListener('input', function () {
+      audit.q = this.value; var pos = this.selectionStart; renderPanel();
+      var n = document.getElementById('a-q'); n.focus(); n.setSelectionRange(pos, pos);
+    });
+    if (ak) ak.addEventListener('change', function () { audit.kind = this.value; renderPanel(); });
   }
   document.getElementById('content').addEventListener('click', function (e) {
     var pick = e.target.closest('[data-pick]');
-    if (pick) { var p = pick.dataset.pick.split('|'); sel = { kind: p[0], id: p[1] }; renderPanel(); return; }
+    if (pick) {
+      var p = pick.dataset.pick.split('|');
+      if (p[0] === 'account') return reviewAccount(p[1]);
+      if (p[0] === 'unlock') return unlockAccount(p[1]);
+      sel = { kind: p[0], id: p[1] }; renderPanel(); return;
+    }
     if (e.target.closest('[data-cancel]')) { sel = null; renderPanel(); return; }
+    var go = e.target.closest('[data-nav-go]'); if (go) return setActive(go.dataset.navGo, true);
     var view = e.target.closest('[data-view]'); if (view) return viewChallenge(view.dataset.view);
     var mo = e.target.closest('[data-mopen]'); if (mo) return showMeeting(mo.dataset.mopen);
     var mc = e.target.closest('[data-mcancel]'); if (mc) return cancelMeeting(mc.dataset.mcancel);
@@ -395,12 +491,16 @@
   }
   var FEMAP = {
     progress: { pct: 'f-pct', note: 'f-note' },
-    newchallenge: { title: 'f-title', description: 'f-desc', due_date: 'f-due', funded: 'f-fund' },
-    respond: { response: 'f-text' }, review: { comment: 'f-comment' }, account: { reason: 'f-reason' },
-    bookmeeting: { challenge: 'm-c', title: 'm-t', date: 'm-d', mode: 'm-mode', start: 'm-s' }
+    newchallenge: { title: 'f-title', description: 'f-desc', due_date: 'f-due', funded: 'f-fund', budget: 'f-budget' },
+    respond: { response: 'f-text' }, review: { comment: 'f-comment' },
+    bookmeeting: { challenge: 'm-c', title: 'm-t', date: 'm-d', venue: 'm-v', start: 'm-s' }
   };
   function doAction(kind, action) {
     clearErrs();
+    if (kind === 'auditrefresh') {
+      if (live) return reload().then(function () { U.toast('Audit log refreshed.', 'ok'); });
+      return renderPanel();
+    }
     var ferr = function (er) { API.fieldErrors(er, FEMAP[kind] || {}); API.fail(er); };
     var id = sel ? sel.id : null, c = id ? findCh(id) : null;
 
@@ -413,17 +513,20 @@
       c.status = 'In progress'; return done('Progress updated to ' + pct + '%.');
     }
     if (kind === 'newchallenge') {
-      var t = val('f-title'), due = val('f-due'), desc = val('f-desc'), detail = val('f-detail'), ok = true;
+      var t = val('f-title'), due = val('f-due'), desc = val('f-desc'), ok = true;
       if (t.length < 5) ok = setErr('f-title', 'Enter a title (5+ characters).') && ok;
       if (!due) ok = setErr('f-due', 'Choose a deadline.') && ok;
       if (desc.length < 20) ok = setErr('f-desc', 'Describe the challenge (20+ characters).') && ok;
-      var fund = document.querySelector('input[name=f-fund]:checked');
-      if (role === 'representative' && !fund) ok = setErr('f-fund', 'Choose whether your organisation will fund this project.') && ok;
+      var fund = val('f-fund') ? { value: val('f-fund') } : null;
+      if (!fund) ok = setErr('f-fund', 'Choose whether this project will be funded. A challenge cannot be submitted without this.') && ok;
+      var budget = val('f-budget'), funds = !!(fund && fund.value === 'yes');
+      if (funds && !(+budget > 0)) ok = setErr('f-budget', 'Enter the budget amount in Rand.') && ok;
       if (!ok) return;
-      if (live) return API.post('/challenges', { title: t, description: desc, detail: detail, due_date: due, funded: fund ? fund.value : undefined }).then(function (r) { done(r.message); }).catch(ferr);
+      if (live) return API.post('/challenges', { title: t, description: desc, due_date: due, funded: fund ? fund.value : undefined,
+        budget: funds ? +budget : undefined }).then(function (r) { done(r.message); }).catch(ferr);
       var nid = 'DCC-' + String(100 + Math.floor(Math.random() * 800)).padStart(6, '0');
-      var nc = { id: nid, title: t, desc: desc + (detail ? '\n\nMore detail: ' + detail : ''), due: new Date(due + 'T17:00'), pct: 0,
-        status: 'Review', funded: fund ? fund.value === 'yes' : 'none', by: ME.name, team: [], supervisor: ME.name };
+      var nc = { id: nid, title: t, desc: desc, due: new Date(due + 'T17:00'), pct: 0,
+        status: 'Review', funded: fund ? fund.value === 'yes' : 'none', budget: funds ? +budget : null, by: ME.name, team: [], supervisor: ME.name };
       if (role === 'representative') D.subs.unshift(nc); else D.challenges.unshift(nc);
       return done(nid + ' submitted.');
     }
@@ -441,30 +544,20 @@
       else c.status = 'Closed';
       return done(id + ' updated.');
     }
-    if (kind === 'account') {
-      var reason = val('f-reason');
-      if (action === 'reject' && reason.length < 3) return setErr('f-reason', 'Give a reason for declining.');
-      if (live) return API.post('/approvals/users/' + encodeURIComponent(id) + '/' + (action === 'approve' ? 'approve' : 'reject'), action === 'reject' ? { reason: reason } : {}).then(function (r) { done(r.message); }).catch(ferr);
-      D.pending = (D.pending || []).filter(function (x) { return x.id !== id; }); return done('Account updated.');
-    }
-    if (kind === 'unlock') {
-      if (live) return API.post('/approvals/users/' + encodeURIComponent(id) + '/unlock').then(function (r) { done(r.message); }).catch(ferr);
-      D.locked = (D.locked || []).filter(function (x) { return x.id !== id; }); return done('Account unlocked.');
-    }
     if (kind === 'bookmeeting') {
       var cid = val('m-c'), title2 = val('m-t'), day = val('m-d'), start = val('m-s'), mins = +val('m-m');
-      var mode = (document.querySelector('input[name=m-mode]:checked') || {}).value, ok2 = true;
+      var venue = val('m-v').replace(/\s+/g, ' '), ok2 = true;
       if (!cid) ok2 = setErr('m-c', 'Choose a challenge.') && ok2;
       if (title2.length < 3) ok2 = setErr('m-t', 'Give the meeting a title.') && ok2;
       if (!day) ok2 = setErr('m-d', 'Choose a date.') && ok2;
       else if (new Date(day + 'T' + start) <= new Date()) ok2 = setErr('m-d', 'Choose a time in the future.') && ok2;
-      if (!mode) ok2 = setErr('m-mode', 'Choose Online or In person.') && ok2;
+      if (venue.length < 2) ok2 = setErr('m-v', 'Enter the venue.') && ok2;
       if (!ok2) return;
-      if (live) return API.post('/meetings', { challenge: cid, title: title2, date: day, start: start, mins: mins, mode: mode, agenda: val('m-a') }).then(function (r) { done(r.message); }).catch(ferr);
+      if (live) return API.post('/meetings', { challenge: cid, title: title2, date: day, start: start, mins: mins, venue: venue, agenda: val('m-a') }).then(function (r) { done(r.message); }).catch(ferr);
       var ch2 = findCh(cid), people = [];
       (Array.isArray(ch2.team) ? ch2.team : []).concat(ch2.by ? [ch2.by] : [], ch2.supervisor ? [ch2.supervisor] : [ME.name]).forEach(function (p) { if (people.indexOf(p) < 0) people.push(p); });
       MEET.meetings.push({ id: 'M-' + (100 + MEET.meetings.length), cid: cid, title: title2, challenge: ch2 ? ch2.title + ' (' + cid + ')' : cid,
-        date: day, start: start, mins: mins, mode: mode, organiser: ME.name, people: people, agenda: val('m-a') });
+        date: day, start: start, mins: mins, venue: venue, organiser: ME.name, people: people, agenda: val('m-a') });
       return done('Meeting scheduled. Everyone invited is notified.');
     }
   }
@@ -479,7 +572,22 @@
       supervisor: { name: 'Dr Sipho Ndlovu', initials: 'SN', meta: 'Supervisor · DCC00011', roleLabel: 'Supervisor',
         profile: { id: 'DCC00011', email: 's.ndlovu@unizulu.ac.za', org: 'University of Zululand', interest: 'Data Science & Machine Learning', joined: '2025-08-03' } }
     };
+    profiles.admin = { name: 'System Administrator', initials: 'SA', meta: 'Administrator · DCC00000', roleLabel: 'Administrator',
+      profile: { id: 'DCC00000', email: 'admin@devchallenges.community', org: 'Development Challenges Community', joined: '2025-04-01' } };
     var me = profiles[r], events = [];
+    if (r === 'admin') return { me: me, events: events, notes: [],
+      pending: [{ id: 'DCC00020', name: 'Ms Zanele Ngcobo', role: 'Representative', org: 'uMhlathuze Municipality', email: 'z.ngcobo@umhlathuze.gov.za', when: d(-2) }],
+      locked: [{ id: 'DCC00022', name: 'Mr Sifiso Gumede', why: '3 failed login attempts', ago: 1 }],
+      members: [
+        { id: 'DCC00020', name: 'Ms Zanele Ngcobo', role: 'Representative', org: 'uMhlathuze Municipality', email: 'z.ngcobo@umhlathuze.gov.za', status: 'pending' },
+        { id: 'DCC00022', name: 'Mr Sifiso Gumede', role: 'Student', org: 'University of Zululand', email: 'sifiso.gumede@unizulu.ac.za', status: 'locked' },
+        { id: 'DCC00003', name: 'Ms Sbongokuhle Msomi', role: 'Representative', org: 'BET Media', email: 'sbongokuhle@betmedia.co.za', status: 'active' }
+      ],
+      audit: [
+        { who: 'Ms Zanele Ngcobo', text: 'registered as a Representative — awaiting approval.', kind: 'warn', at: d(-2), ago: 2 },
+        { who: 'System', text: '3 failed login attempts for DCC00022 — account locked.', kind: 'bad', at: d(-1), ago: 1 },
+        { who: 'System', text: 'auto-assigned a team to DCC-000003.', kind: 'ok', at: d(-1), ago: 1 }
+      ] };
     if (r === 'student') return { me: me, events: events, notes: [],
       mine: [{ id: 'DCC-000001', title: 'Expansion of knowledge through communication', status: 'In Progress', supervisor: 'Dr Sipho Ndlovu',
         due: d(24), pct: 45, history: [{ at: d(-5), pct: 45, note: 'Campaign drafts shared.' }], assigned: d(-20), team: ['Amahle Mthembu'],
@@ -509,11 +617,11 @@
   function demoMeetings() {
     if (role === 'supervisor') return { meetings: [
       { id: 'M-101', cid: 'DCC-000001', title: 'Progress review', challenge: 'Expansion of knowledge through communication (DCC-000001)',
-        date: U.workday(1), start: '10:00', mins: 60, mode: 'Online', organiser: ME.name, people: ['Amahle Mthembu', 'Sbongokuhle Msomi', ME.name], agenda: 'Next milestones.' }
+        date: U.workday(1), start: '10:00', mins: 60, venue: 'Lab DC-002', organiser: ME.name, people: ['Amahle Mthembu', 'Sbongokuhle Msomi', ME.name], agenda: 'Next milestones.' }
     ], booked: [] };
     return { meetings: [
       { id: 'M-101', cid: 'DCC-000001', title: 'Progress review', challenge: 'Expansion of knowledge through communication (DCC-000001)',
-        date: U.workday(1), start: '10:00', mins: 60, mode: 'Online', organiser: 'Dr Sipho Ndlovu', people: [ME.name], agenda: 'Next milestones.' }
+        date: U.workday(1), start: '10:00', mins: 60, venue: 'Lab DC-002', organiser: 'Dr Sipho Ndlovu', people: [ME.name], agenda: 'Next milestones.' }
     ], booked: [] };
   }
   function demoNotes() {

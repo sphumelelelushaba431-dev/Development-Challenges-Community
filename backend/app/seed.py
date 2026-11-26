@@ -1,12 +1,15 @@
 """Demo data that matches the front-end screens. Every demo account's password is Demo@1234."""
 from datetime import date, datetime, timedelta, timezone
 
+from flask import current_app
 from werkzeug.security import generate_password_hash
 
 from .db import execute, jdump, query
 from .services import classify_text, set_code, store_areas
 
 PASSWORD = "Demo@1234"
+ADMIN = ("DCC00000", "admin", "", "System", "Administrator", "", "admin@devchallenges.community", "0359026001",
+         "Development Challenges Community", [], "active", 0, 0.0, 600)
 
 
 def ts(days):
@@ -28,7 +31,7 @@ def workday(n):
 
 USERS = [
     # member_no, role, title, first, surname, gender, email, phone, org, areas, status, available, record, joined (days ago)
-    ("DCC00001", "supervisor", "Ms", "Nokuthula", "Mkhize", "Female", "admin@devchallenges.community", "0359026000", "Development Challenges Community", ["Research", "Health & Community Wellbeing"], "active", 1, 0.9, 540),
+    ("DCC00001", "supervisor", "Ms", "Nokuthula", "Mkhize", "Female", "n.mkhize@devchallenges.community", "0359026000", "Development Challenges Community", ["Research", "Health & Community Wellbeing"], "active", 1, 0.9, 540),
     ("DCC00002", "student", "Ms", "Amahle", "Mthembu", "Female", "amahle.mthembu@unizulu.ac.za", "0712345678", "University of Zululand", ["Design, Media & Communication", "Data Science & Machine Learning"], "active", 1, 0.9, 280),
     ("DCC00003", "representative", "Ms", "Sbongokuhle", "Msomi", "Female", "sbongokuhle@betmedia.co.za", "0731112233", "BET Media", [], "active", 1, 0.8, 300),
     ("DCC00004", "student", "Mr", "Lwazi", "Dube", "Male", "lwazi.dube@unizulu.ac.za", "0724445566", "University of Zululand", ["Software & Web Development", "Internet of Things & Embedded Systems"], "active", 1, 0.7, 250),
@@ -79,12 +82,13 @@ CHALLENGES = [
 
 def seed():
     ids = {}
-    for (no, role, title, first, last, gender, email, phone, org, areas, status, avail, rec, joined) in USERS:
+    for (no, role, title, first, last, gender, email, phone, org, areas, status, avail, rec, joined) in [ADMIN] + USERS:
+        pw = current_app.config["ADMIN_PASSWORD"] if role == "admin" else PASSWORD
         ids[no] = execute("""INSERT INTO users (member_no, role, title, first_name, surname, gender, id_number, phone, email, organisation, interest, expertise,
                              address, password_hash, status, available, record, joined_at, failed_logins, locked_at, terms_at)
                              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                           (no, role, title, first, last, gender, "9001015009086", phone, email, org, areas[0] if areas else "", jdump(areas),
-                           "University Road, KwaDlangezwa, 3886", generate_password_hash(PASSWORD), status, avail, rec, ts(-joined),
+                           "University Road, KwaDlangezwa, 3886", generate_password_hash(pw), status, avail, rec, ts(-joined),
                            3 if status == "locked" else 0, ts(-1) if status == "locked" else None, ts(-joined)))
     codes = {}
     for (title, desc, by, sup, status, funded, due, created, team, pct, done, summary) in CHALLENGES:

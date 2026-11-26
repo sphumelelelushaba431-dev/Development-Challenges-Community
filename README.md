@@ -30,11 +30,14 @@ Open **http://localhost:3000**.
 The front end finds the backend through `frontend/js/config.js` (`apiBase: 'http://127.0.0.1:5000/api'`). If the backend runs somewhere else, change that line.
 
 ## Demo accounts
-The password for every account is **`Demo@1234`**.
+**Administrator:** Member no. **`DCC00000`**, password **`Admin@2026`** (change it with the `ADMIN_PASSWORD` environment variable before the database is created, or under Settings after signing in). Only the administrator can approve, decline or unlock user accounts and open the **Audit log**.
+
+The password for every other account is **`Demo@1234`**.
 
 | Member no. | Name | Role |
 |---|---|---|
-| DCC00001 | Ms Nokuthula Mkhize | Administrator |
+| DCC00000 | System Administrator | Administrator (user accounts + audit log) |
+| DCC00001 | Ms Nokuthula Mkhize | Supervisor |
 | DCC00002 | Ms Amahle Mthembu | Student |
 | DCC00003 | Ms Sbongokuhle Msomi | Representative (BET Media) |
 | DCC00011 | Dr Sipho Ndlovu | Supervisor (already at the 5-challenge limit) |
@@ -101,7 +104,7 @@ All weights, thresholds and limits are in `backend/app/config.py`. `GET /api/adm
   - books in-person meetings in labs DC-001 to DC-004 (no double bookings, weekdays 08:00–17:00)
   - submits challenges (no funding question)
 - **Student:** requests recommended challenges, updates progress and submits completed work.
-- **Administrator:** approves or rejects accounts, unlocks accounts, and sees members, organisations and activity.
+- **Administrator (only):** approves or rejects accounts, unlocks locked accounts, sees every member, and reads the **Audit log** (search and filter every recorded action). Supervisors, representatives and students cannot manage user accounts.
 - **Everyone:** notifications and messages, profile, settings and password change.
 
 More detail: `backend/README.md` (API and tests) and `frontend/README.md` (pages and configuration).

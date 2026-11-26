@@ -14,6 +14,7 @@ def _env(name, default, cast=str):
 
 
 class Config:
+    ADMIN_PASSWORD = _env("ADMIN_PASSWORD", "Admin@2026")   # password of the system administrator (DCC00000)
     SECRET_KEY = _env("SECRET_KEY", "change-this-secret-key-in-production")
     DATABASE = _env("DATABASE", os.path.join(BASE_DIR, "instance", "dcc.sqlite3"))
     UPLOAD_FOLDER = _env("UPLOAD_FOLDER", os.path.join(BASE_DIR, "instance", "uploads"))
@@ -32,7 +33,6 @@ class Config:
     SUPERVISOR_CAP = 5        # open challenges per supervisor
     STUDENT_CAP = 3           # active challenges per student
     AUTO_TEAM_SIZE = 3        # students auto-assigned to an approved challenge
-    MEETING_MODES = ("Online", "In person")
 
     # MCDA (see app/mcda.py)
     # Weights come from AHP pairwise judgements (Saaty 1–9 scale: "the first is x times as important as the second").

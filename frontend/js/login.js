@@ -8,13 +8,13 @@
   var MEMBER_ID = /^DCC\d{5}$/i;
   // Demo mode only: the seeded accounts and the role saved on each one. Live mode reads the role from /api/auth/login.
   var DEMO = {
-    DCC00001: 'supervisor', DCC00002: 'student', DCC00003: 'representative', DCC00004: 'student',
+    DCC00000: 'admin', DCC00001: 'supervisor', DCC00002: 'student', DCC00003: 'representative', DCC00004: 'student',
     DCC00005: 'student', DCC00006: 'student', DCC00007: 'student', DCC00008: 'representative',
     DCC00009: 'representative', DCC00010: 'representative', DCC00011: 'supervisor', DCC00012: 'supervisor',
     DCC00013: 'supervisor', DCC00014: 'supervisor', DCC00015: 'supervisor', DCC00016: 'supervisor'
   };
   var DEMO_EMAILS = {
-    'admin@devchallenges.community': 'supervisor', 'amahle.mthembu@unizulu.ac.za': 'student', 'sbongokuhle@betmedia.co.za': 'representative',
+    'admin@devchallenges.community': 'admin', 'n.mkhize@devchallenges.community': 'supervisor', 'amahle.mthembu@unizulu.ac.za': 'student', 'sbongokuhle@betmedia.co.za': 'representative',
     'lwazi.dube@unizulu.ac.za': 'student', 'thando.khumalo@unizulu.ac.za': 'student', 'ayanda.zulu@mut.ac.za': 'student',
     'nosipho.cele@unizulu.ac.za': 'student', 'sizwe@umhlathuze.gov.za': 'representative', 'palesa@rbct.org.za': 'representative',
     'kagiso@unizulu.ac.za': 'representative', 's.ndlovu@unizulu.ac.za': 'supervisor', 'a.pillay@unizulu.ac.za': 'supervisor',
@@ -55,7 +55,7 @@
     }
     // Demo mode: check the seeded credentials, then save the role that came with that account.
     var key = id.toUpperCase(), role = DEMO[key] || DEMO_EMAILS[id.toLowerCase()];
-    if (!role || $('password').value !== 'Demo@1234') {
+    if (!role || $('password').value !== (role === 'admin' ? 'Admin@2026' : 'Demo@1234')) {
       alertMsg('The Member ID or password is incorrect.'); return;
     }
     try {

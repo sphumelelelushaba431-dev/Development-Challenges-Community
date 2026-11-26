@@ -123,14 +123,15 @@
         '<div class="min-w-0 flex-1"><div class="truncate text-[15px] font-semibold text-white">' + esc(ME.name) + '</div><div class="truncate text-[12px] text-blue-200">' + esc(ME.roleLabel) + (p.id ? ' · ' + esc(p.id) : '') + '</div></div>' +
         '<button data-prof="settings" aria-label="Settings" title="Settings" class="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-blue-200 hover:bg-white/10 hover:text-white">' + icon('cog', 'size-5') + '</button></div>' +
       '<dl class="divide-y divide-slate-100 px-4 py-1.5 text-[13px]">' + row('Email', p.email) + row('Phone', p.phone) + row('Organisation', p.org) + row('Interest', p.interest) + row('Address', p.address) + row('Member since', p.joined ? fmt(new Date(p.joined)) : '') + '</dl>' +
-      '<div class="grid grid-cols-[1fr_auto_auto] gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3"><button data-prof="edit" class="btn btn-primary py-2 text-[13px]">' + icon('user', 'size-4') + 'Update information</button>' +
-        '<button data-prof="settings" class="btn px-3 py-2 text-[13px]">' + icon('cog', 'size-4') + 'Settings</button><button data-prof="logout" class="btn border-red-200 px-3 py-2 text-[13px] text-red-700 hover:bg-red-50">' + icon('logout', 'size-4') + 'Logout</button></div>';
+      // Settings is only the cog icon in the corner above; "Update information" lives inside Settings.
+      '<div class="flex justify-end border-t border-slate-200 bg-slate-50 px-4 py-3"><button data-prof="logout" class="btn border-red-200 px-3 py-2 text-[13px] text-red-700 hover:bg-red-50">' + icon('logout', 'size-4') + 'Logout</button></div>';
     document.body.appendChild(box); document.getElementById('top-avatar').setAttribute('aria-expanded', 'true');
-    box.querySelector('[data-prof=edit]').focus();
+    box.querySelector('[data-prof=settings]').focus();
   }
   function editProfile() {
     closeProfile();
     var p = ME.profile || {}, f = function (id, label, val, type, extra) { return '<div><label for="pf-' + id + '" class="label">' + label + '</label><input id="pf-' + id + '" type="' + (type || 'text') + '" value="' + esc(val || '') + '" class="input py-2" ' + (extra || '') + '><span id="pf-' + id + '-err" class="err"></span></div>'; };
+    var pw = function (id, label, ac) { return f(id, label, '', 'password', 'autocomplete="' + ac + '"'); };
     modal('Update information',
       '<div class="grid grid-cols-2 gap-x-4 gap-y-2.5">' +
         '<div class="col-span-2 flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2"><span class="flex size-9 items-center justify-center rounded-full bg-brand-100 text-[13px] font-bold text-brand-700">' + esc(ME.initials) + '</span><div class="min-w-0 flex-1"><div class="truncate font-semibold">' + esc(ME.name) + '</div><div class="text-xs text-slate-500">' + esc(ME.roleLabel) + (p.id ? ' · ' + esc(p.id) : '') + ' · name and ID cannot be changed here</div></div></div>' +
@@ -140,8 +141,12 @@
         (p.interest !== undefined ? '<div><label for="pf-interest" class="label">Area of Interest</label><select id="pf-interest" class="input py-2">' + AREAS.map(function (a) { return '<option' + (a === p.interest ? ' selected' : '') + '>' + esc(a) + '</option>'; }).join('') + '</select></div>' : '<div></div>') +
         '<div class="col-span-2">' + f('address', 'Physical address', p.address, 'text', 'autocomplete="street-address"') + '</div>' +
         '<div class="col-span-2"><label for="pf-photo" class="label">Profile photo <span class="font-normal text-slate-500">(JPG/PNG, max 2 MB)</span></label><input id="pf-photo" type="file" accept="image/jpeg,image/png" class="block w-full text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:font-semibold file:text-brand-800"><span id="pf-photo-err" class="err"></span></div>' +
-      '</div>',
-      [{ label: 'Cancel' }, { label: 'Save changes', primary: true, onClick: function () {
+      '</div>' +
+      '<h4 class="mt-5 mb-1 border-t border-slate-200 pt-4 text-[13px] font-bold text-brand-900">Change password <span class="font-normal text-slate-500">(optional)</span></h4>' +
+      '<div class="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2"><div class="sm:col-span-2">' + pw('cur', 'Current password', 'current-password') + '</div>' +
+        pw('pw', 'New password', 'new-password') + pw('pw2', 'Confirm new password', 'new-password') + '</div>',
+      [{ label: 'Cancel', onClick: function () { settings(); return false; } },   // back to Settings
+       { label: 'Save changes', primary: true, onClick: function () {
         var v = function (id) { return document.getElementById('pf-' + id).value.trim(); }, ok = true;
         var bad = function (id, m) { document.getElementById('pf-' + id + '-err').textContent = m; document.getElementById('pf-' + id).classList.add('invalid'); ok = false; };
         document.querySelectorAll('#modal-root .err').forEach(function (e) { e.textContent = ''; }); document.querySelectorAll('#modal-root .invalid').forEach(function (e) { e.classList.remove('invalid'); });
@@ -150,7 +155,20 @@
         if (v('org').length < 2) bad('org', 'Enter your organisation.');
         var file = document.getElementById('pf-photo').files[0];
         if (file && (file.size > 2 * 1048576 || !/image\/(jpeg|png)/.test(file.type))) bad('photo', 'Use a JPG or PNG under 2 MB.');
+        // Change password (optional): only checked when one of the three boxes is filled in. Passwords are not trimmed.
+        var raw = function (id) { return document.getElementById('pf-' + id).value; };
+        var change = !!(raw('cur') || raw('pw') || raw('pw2'));
+        if (change) {
+          if (!raw('cur')) bad('cur', 'Enter your current password.');
+          if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$/.test(raw('pw'))) bad('pw', '8+ characters with upper, lower, number and symbol.');
+          else if (raw('pw') !== raw('pw2')) bad('pw2', 'Passwords do not match.');
+          else if (raw('pw') === raw('cur')) bad('pw', 'Choose a different password.');
+        }
         if (!ok) return false;
+        var saved = function () {
+          var root = document.getElementById('modal-root'); root.innerHTML = ''; restoreFocus();
+          toast('Your information has been updated.' + (change ? ' Your password has been changed.' : ''), 'ok');
+        };
         if (window.API && API.on()) {
           var body = new FormData();
           body.append('email', v('email'));
@@ -159,51 +177,44 @@
           body.append('address', v('address'));
           if (document.getElementById('pf-interest')) body.append('interest', document.getElementById('pf-interest').value);
           if (file) body.append('photo', file);
-          API.put('/me', body).then(function (u) { ME.profile = u.profile; API.session(API.token(), u); paintAvatar(); toast('Your information has been updated.', 'ok'); }).catch(API.fail);
-          return;
+          // Password first: if the current password is wrong nothing is saved and the window stays open to fix it.
+          (change ? API.post('/me/password', { current: raw('cur'), new: raw('pw') }).then(function (r) { API.session(r.token); }) : Promise.resolve())
+            .then(function () { return API.put('/me', body); })
+            .then(function (u) { ME.profile = u.profile; API.session(API.token(), u); paintAvatar(); saved(); })
+            .catch(function (e) { API.fieldErrors(e, { current: 'pf-cur', 'new': 'pf-pw', email: 'pf-email', phone: 'pf-phone', org: 'pf-org', address: 'pf-address', photo: 'pf-photo' }); API.fail(e); });
+          return false;   // keep the window open until the server confirms
         }
         p.email = v('email'); p.phone = v('phone'); p.org = v('org'); p.address = v('address');
         if (document.getElementById('pf-interest')) p.interest = document.getElementById('pf-interest').value;
         ME.profile = p;
-        var done = function () { toast('Your information has been updated.', 'ok'); };
-        if (file) { var r = new FileReader(); r.onload = function () { p.photo = r.result; paintAvatar(); done(); }; r.readAsDataURL(file); } else done();
+        if (file) { var r = new FileReader(); r.onload = function () { p.photo = r.result; paintAvatar(); saved(); }; r.readAsDataURL(file); } else saved();
+        return false;
       } }]);
   }
   var PREFS = { email: true, alloc: true, msgs: true, remind: '7' };
   function settings() {
     closeProfile();
-    var tg = function (id, label, hint, on) { return '<label class="flex cursor-pointer items-center gap-3 py-2"><span class="min-w-0 flex-1"><span class="block font-medium text-slate-800">' + label + '</span><span class="block text-xs text-slate-500">' + hint + '</span></span>' +
+    var tg = function (id, label, on) { return '<label class="flex cursor-pointer items-center gap-3 py-2.5"><span class="min-w-0 flex-1 font-medium text-slate-800">' + label + '</span>' +
       '<input id="st-' + id + '" type="checkbox"' + (on ? ' checked' : '') + ' class="peer sr-only"><span class="relative h-5 w-9 shrink-0 rounded-full bg-slate-300 transition peer-checked:bg-brand-700 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500 after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-4"></span></label>'; };
-    var pf = function (id, label, ac) { return '<div><label for="st-' + id + '" class="label">' + label + '</label><input id="st-' + id + '" type="password" class="input py-2" autocomplete="' + ac + '"><span id="st-' + id + '-err" class="err"></span></div>'; };
+    var me = ME.profile || {};
     modal('Settings',
-      '<h4 class="mb-1 text-[13px] font-bold text-brand-900">Notifications</h4><div class="divide-y divide-slate-100 rounded-lg border border-slate-200 px-3">' +
-        tg('email', 'Email me notifications', 'Copies of notifications are sent to your email.', PREFS.email) +
-        tg('alloc', 'Challenge and allocation updates', 'New allocations, reviews and status changes.', PREFS.alloc) +
-        tg('msgs', 'Messages', 'When someone sends you a message.', PREFS.msgs) +
-        '<div class="flex items-center gap-3 py-2"><label for="st-remind" class="min-w-0 flex-1"><span class="block font-medium text-slate-800">Deadline reminders</span><span class="block text-xs text-slate-500">How early to remind you before a deadline.</span></label><select id="st-remind" class="input w-36 py-1.5">' +
+      '<h4 class="mb-1 text-[13px] font-bold text-brand-900">Your information</h4>' +
+      '<div class="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5">' +
+        '<div class="min-w-0 flex-1"><div class="truncate font-medium text-slate-800">' + esc(ME.name) + '</div><div class="truncate text-xs text-slate-500">' + esc([me.email, me.phone, me.org].filter(Boolean).join(' · ')) + '</div></div>' +
+        '<button id="st-edit" type="button" class="btn btn-primary shrink-0 px-3 py-1.5 text-[13px]">' + icon('user', 'size-4') + 'Update information</button></div>' +
+      '<h4 class="mt-4 mb-1 text-[13px] font-bold text-brand-900">Notifications</h4><div class="divide-y divide-slate-100 rounded-lg border border-slate-200 px-3">' +
+        tg('email', 'Email me notifications', PREFS.email) +
+        tg('alloc', 'Challenge and allocation updates', PREFS.alloc) +
+        tg('msgs', 'Messages', PREFS.msgs) +
+        '<div class="flex items-center gap-3 py-2"><label for="st-remind" class="min-w-0 flex-1 font-medium text-slate-800">Deadline reminders</label><select id="st-remind" class="input w-36 py-1.5">' +
           [['3', '3 days before'], ['7', '7 days before'], ['14', '14 days before'], ['0', 'Off']].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === PREFS.remind ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
-      '</div>' +
-      '<h4 class="mt-4 mb-1 text-[13px] font-bold text-brand-900">Change password <span class="font-normal text-slate-500">(optional)</span></h4>' +
-      '<div class="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2"><div class="sm:col-span-2">' + pf('cur', 'Current password', 'current-password') + '</div>' + pf('pw', 'New password', 'new-password') + pf('pw2', 'Confirm new password', 'new-password') + '</div>',
+      '</div>',
       [{ label: 'Cancel' }, { label: 'Save settings', primary: true, onClick: function () {
-        var v = function (id) { return document.getElementById('st-' + id).value; }, ok = true;
-        var bad = function (id, m) { document.getElementById('st-' + id + '-err').textContent = m; document.getElementById('st-' + id).classList.add('invalid'); ok = false; };
-        document.querySelectorAll('#modal-root .err').forEach(function (e) { e.textContent = ''; }); document.querySelectorAll('#modal-root .invalid').forEach(function (e) { e.classList.remove('invalid'); });
-        var change = v('cur') || v('pw') || v('pw2');
-        if (change) {
-          if (!v('cur')) bad('cur', 'Enter your current password.');
-          if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$/.test(v('pw'))) bad('pw', '8+ characters with upper, lower, number and symbol.');
-          else if (v('pw') !== v('pw2')) bad('pw2', 'Passwords do not match.');
-          else if (v('pw') === v('cur')) bad('pw', 'Choose a different password.');
-        }
-        if (!ok) return false;
-        PREFS = { email: document.getElementById('st-email').checked, alloc: document.getElementById('st-alloc').checked, msgs: document.getElementById('st-msgs').checked, remind: v('remind') };
-        if (change && window.API && API.on()) {
-          API.post('/me/password', { current: v('cur'), new: v('pw') }).then(function (r) { API.session(r.token); toast('Settings saved. Your password has been changed.', 'ok'); }).catch(API.fail);
-          return;
-        }
-        toast('Settings saved.' + (change ? ' Your password has been changed.' : ''), 'ok');
+        PREFS = { email: document.getElementById('st-email').checked, alloc: document.getElementById('st-alloc').checked, msgs: document.getElementById('st-msgs').checked,
+          remind: document.getElementById('st-remind').value };
+        toast('Settings saved.', 'ok');
       } }]);
+    document.getElementById('st-edit').addEventListener('click', editProfile);
   }
   document.addEventListener('click', function (e) {
     if (!ME) return;
@@ -227,11 +238,11 @@
   var workday = function (n) { var d = new Date(); d.setHours(12, 0, 0, 0); while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() % 6) n--; } return isoDay(d); };
   function meetingDetails(m) {
     var row = function (k, v) { return '<div class="flex gap-3 py-1.5"><dt class="w-24 shrink-0 text-slate-500">' + k + '</dt><dd class="min-w-0 font-medium text-slate-800">' + v + '</dd></div>'; };
-    modal('Meeting — ' + esc(m.venue),
+    modal('Meeting — ' + esc(m.venue || m.mode || ''),
       '<h4 class="text-[16px] font-bold text-brand-950">' + esc(m.title) + '</h4>' + (m.challenge ? '<p class="text-[13px] text-slate-500">' + esc(m.challenge) + '</p>' : '') +
       '<dl class="mt-3 divide-y divide-slate-100 text-[13px]">' +
         row('When', esc(meetWhen(m))) +
-        row('Mode', '<span class="rounded-md bg-brand-50 px-2 py-0.5 font-semibold text-brand-800 ring-1 ring-brand-200">' + esc(m.mode || m.venue || '') + '</span>') +
+        row('Venue', '<span class="rounded-md bg-brand-50 px-2 py-0.5 font-semibold text-brand-800 ring-1 ring-brand-200">' + esc(m.venue || m.mode || '') + '</span>') +
         row('Organiser', esc(m.organiser)) + row('Invited', esc(m.people.join(', '))) + (m.agenda ? row('Agenda', esc(m.agenda)) : '') +
       '</dl>', [{ label: 'Close' }]);
   }

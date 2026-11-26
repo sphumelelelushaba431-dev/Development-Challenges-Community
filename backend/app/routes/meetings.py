@@ -1,4 +1,5 @@
-"""Meetings booked by supervisors. Mode is Online or In person; invitees are derived from the challenge team."""
+"""Meetings booked by supervisors. The supervisor types the venue; invitees are derived from the challenge team.
+The same venue cannot be booked twice for overlapping times."""
 from datetime import date, datetime
 
 from flask import Blueprint, current_app, g, jsonify, request
@@ -29,8 +30,7 @@ def _attendees(ch):
 def serialize(m, with_people=True):
     ch = query("SELECT code, title FROM challenges WHERE id = ?", (m["challenge_id"],), one=True)
     sup = query("SELECT * FROM users WHERE id = ?", (m["supervisor_id"],), one=True)
-    mode = m["venue"] if m["venue"] in current_app.config["MEETING_MODES"] else "In person"
-    out = {"id": "M-%d" % m["id"], "mode": mode, "date": m["date"], "start": m["start"], "mins": m["minutes"]}
+    out = {"id": "M-%d" % m["id"], "venue": m["venue"], "mode": m["venue"], "date": m["date"], "start": m["start"], "mins": m["minutes"]}
     if with_people:
         people = []
         for value in jload(m["people"]):
@@ -67,9 +67,11 @@ def create():
     title = (d.get("title") or "").strip()
     if len(title) < 3:
         errors["title"] = "Give the meeting a title."
-    mode = d.get("mode") or d.get("venue")
-    if mode not in cfg["MEETING_MODES"]:
-        errors["mode"] = "Choose Online or In person."
+    venue = " ".join(str(d.get("venue") or "").split())
+    if len(venue) < 2:
+        errors["venue"] = "Enter the venue (for example Lab DC-002 or a Teams link)."
+    elif len(venue) > 120:
+        errors["venue"] = "Keep the venue under 120 characters."
     try:
         day = date.fromisoformat(d.get("date", ""))
         start = d.get("start", "")
@@ -83,17 +85,23 @@ def create():
             errors["date"] = "Choose a time in the future."
         elif mins not in (30, 60, 90, 120):
             errors["date"] = "Choose a length of 30, 60, 90 or 120 minutes."
+        elif not errors.get("venue"):
+            begin = when.hour * 60 + when.minute
+            for other in query("SELECT * FROM meetings WHERE date = ? AND lower(venue) = lower(?)", (day.isoformat(), venue)):
+                h, mi = (int(x) for x in other["start"].split(":")[:2])
+                if begin < h * 60 + mi + other["minutes"] and h * 60 + mi < begin + mins:
+                    errors["venue"] = "%s is already booked from %s for %d minutes on that day. Choose another venue or time." % (other["venue"], other["start"], other["minutes"])
+                    break
     if errors:
         fail("Please correct the highlighted fields.", 422, **errors)
 
     people = _attendees(ch)
     mid = execute("INSERT INTO meetings (supervisor_id, challenge_id, title, venue, date, start, minutes, people, agenda) VALUES (?,?,?,?,?,?,?,?,?)",
-                  (g.user["id"], ch["id"], title, mode, day.isoformat(), start, mins,
+                  (g.user["id"], ch["id"], title, venue, day.isoformat(), start, mins,
                    jdump([u["member_no"] for u in people]), (d.get("agenda") or "").strip()))
     me = full_name(g.user)
-    where = mode if mode == "Online" else mode + " meeting"
     for u in people:
-        notify(u["id"], "meeting", me, "Meeting: %s · %s %s · %s." % (title, day.isoformat(), start, where), ch["code"], "M-%d" % mid)
+        notify(u["id"], "meeting", me, "Meeting: %s · %s %s · %s." % (title, day.isoformat(), start, "Venue: " + venue), ch["code"], "M-%d" % mid)
     return jsonify({"message": "Meeting scheduled. Everyone invited has been notified.",
                     "meeting": serialize(query("SELECT * FROM meetings WHERE id = ?", (mid,), one=True))}), 201
 

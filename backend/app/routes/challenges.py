@@ -58,7 +58,7 @@ def serialize(ch, detail=False):
     sup = query("SELECT * FROM users WHERE id = ?", (ch["supervisor_id"],), one=True) if ch["supervisor_id"] else None
     by = query("SELECT * FROM users WHERE id = ?", (ch["submitted_by"],), one=True)
     out = {"id": ch["code"], "title": ch["title"], "status": ch["status"], "due": ch["due_date"],
-           "funded": {"yes": True, "no": False}.get(ch["funded"], "none"), "pct": ch["progress"],
+           "funded": {"yes": True, "no": False}.get(ch["funded"], "none"), "budget": ch["budget"], "pct": ch["progress"],
            "supervisor": full_name(sup) if sup else None, "by": full_name(by) if by else None, "org": by["organisation"] if by else None,
            "team": [full_name(s) for s in team_of(ch["id"])], "request": ch["info_request"], "created": ch["created_at"],
            "completed": ch["completed_at"]}
@@ -97,6 +97,17 @@ def auto_allocate_team(ch, by_name=None):
 
 
 # ---------- submit ----------
+def parse_budget(value):
+    """'R 25 000', '25,000.50' or 25000 -> 25000.0; None if missing, not a number, not positive or unrealistically large."""
+    text = str(value if value is not None else "").strip().upper().replace("R", "", 1).replace(" ", "").replace(" ", "").replace(",", "")
+    try:
+        amount = round(float(text), 2)
+    except ValueError:
+        return None
+    return amount if 0 < amount <= 1_000_000_000 else None
+
+
+
 @bp.post("")
 @login_required("representative", "supervisor")
 def submit():
@@ -114,12 +125,15 @@ def submit():
         errors["due_date"] = "Choose a deadline."
     elif due.isoformat() <= now()[:10]:
         errors["due_date"] = "The deadline must be in the future."
-    rep = g.user["role"] == "representative"
-    funded = "none"
-    if rep:                                             # representatives must answer the funding question
-        funded = {"yes": "yes", "true": "yes", "no": "no", "false": "no"}.get(str(d.get("funded", "")).lower())
-        if not funded:
-            errors["funded"] = "Choose whether your organisation will fund this project."
+    # Funding is required for every submission (representatives and supervisors).
+    funded = {"yes": "yes", "true": "yes", "no": "no", "false": "no"}.get(str(d.get("funded") or "").lower())
+    if not funded:
+        errors["funded"] = "Choose whether this project will be funded. A challenge cannot be submitted without this."
+    budget = None
+    if funded == "yes":                                 # whoever says "yes" must give the budget amount
+        budget = parse_budget(d.get("budget"))
+        if budget is None:
+            errors["budget"] = "Enter the budget amount in Rand (for example 25000)."
     if errors:
         fail("Please correct the highlighted fields.", 422, **errors)
 
@@ -127,8 +141,8 @@ def submit():
     classification = classify_text(title, description)
     best, _ranked = assign_supervisor(classification)
     supervisor_id = best["id"] if best else None
-    cid = execute("""INSERT INTO challenges (title, description, priority, due_date, status, funded, submitted_by, supervisor_id)
-                     VALUES (?,?,?,?,?,?,?,?)""", (title, description, "Medium", due.isoformat(), "Submitted", funded, g.user["id"], supervisor_id))
+    cid = execute("""INSERT INTO challenges (title, description, priority, due_date, status, funded, budget, submitted_by, supervisor_id)
+                     VALUES (?,?,?,?,?,?,?,?,?)""", (title, description, "Medium", due.isoformat(), "Submitted", funded, budget, g.user["id"], supervisor_id))
     code = set_code(cid)
     store_areas(cid, classification)
     me = full_name(g.user)

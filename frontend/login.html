@@ -30,14 +30,14 @@
       <!-- Backend: set action to your login endpoint and add data-submit="server" -->
       <form id="login-form" action="/login" method="post" novalidate>
         <div class="fld">
-          <label for="member-id" class="label">Member ID</label>
-          <input id="member-id" name="member_id" class="input" placeholder="Member ID or email" autocomplete="username" autofocus>
+          <label for="member-id" class="label">Member ID or email</label>
+          <input id="member-id" name="member_id" class="input" autocomplete="username" autofocus>
           <span class="err" id="member-id-err"></span>
         </div>
         <div class="fld">
           <label for="password" class="label">Password</label>
           <div class="relative">
-            <input id="password" name="password" type="password" class="input pr-10" placeholder="Enter your password" autocomplete="current-password">
+            <input id="password" name="password" type="password" class="input pr-10" autocomplete="current-password">
             <button type="button" id="toggle-pw" aria-label="Show password" class="absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-md p-1.5 text-slate-500 hover:bg-slate-100"></button>
           </div>
           <span class="err" id="password-err"></span>
@@ -61,7 +61,7 @@
       <form id="reset-form" action="/forgot-password" method="post" novalidate>
         <div class="fld">
           <label for="reset-email" class="label">Email address</label>
-          <input id="reset-email" name="email" type="email" class="input" placeholder="name@example.com" autocomplete="email">
+          <input id="reset-email" name="email" type="email" class="input" autocomplete="email">
           <span class="err" id="reset-email-err"></span>
         </div>
         <button type="submit" class="btn btn-primary w-full py-3 text-base">Send reset link</button>

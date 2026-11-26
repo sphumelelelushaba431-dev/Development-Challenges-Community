@@ -53,8 +53,10 @@ def test_register_approve_login(client, login):
     assert r.status_code == 201
     no = r.json["member_no"]
     assert client.post("/api/auth/login", json={"member_id": no, "password": "Strong@123"}).status_code == 403
-    sup = login("DCC00001")
-    assert client.post("/api/approvals/users/%s/approve" % no, headers=sup).status_code == 200
+    sup, rep = login("DCC00001"), login("DCC00003")
+    assert client.post("/api/approvals/users/%s/approve" % no, headers=sup).status_code == 403   # supervisors cannot manage accounts
+    assert client.post("/api/approvals/users/%s/approve" % no, headers=rep).status_code == 403   # nor can representatives
+    assert client.post("/api/approvals/users/%s/approve" % no, headers=login("DCC00000", "Admin@2026")).status_code == 200
     assert client.post("/api/auth/login", json={"member_id": no, "password": "Strong@123"}).status_code == 200
 
 
@@ -78,7 +80,8 @@ def test_lockout_and_unlock(client, login):
         assert client.post("/api/auth/login", json={"member_id": "DCC00004", "password": "wrong"}).status_code == 401
     assert client.post("/api/auth/login", json={"member_id": "DCC00004", "password": "wrong"}).status_code == 403
     assert client.post("/api/auth/login", json={"member_id": "DCC00004", "password": "Demo@1234"}).status_code == 403
-    client.post("/api/approvals/users/DCC00004/unlock", headers=login("DCC00001"))
+    assert client.post("/api/approvals/users/DCC00004/unlock", headers=login("DCC00001")).status_code == 403
+    assert client.post("/api/approvals/users/DCC00004/unlock", headers=login("DCC00000", "Admin@2026")).status_code == 200
     assert client.post("/api/auth/login", json={"member_id": "DCC00004", "password": "Demo@1234"}).status_code == 200
 
 
@@ -88,7 +91,7 @@ def test_submit_auto_supervisor_auto_team_and_completion(client, login):
             "detail": "Place sensors at every riser and send an SMS to the plumbing team.", "due_date": future(),
             "priority": "Critical", "files": "ignored"}
     assert client.post("/api/challenges", json=body, headers=rep).status_code == 422          # funding answer required
-    r = client.post("/api/challenges", json={**body, "funded": "yes"}, headers=rep)
+    r = client.post("/api/challenges", json={**body, "funded": "yes", "budget": 10000}, headers=rep)
     assert r.status_code == 201
     ch = r.json["challenge"]
     code = ch["id"]
@@ -121,10 +124,10 @@ def test_supervisor_submit_waits_for_review(client, login):
     sup = login("DCC00011")
     r = client.post("/api/challenges", json={"title": "Lab equipment booking tool",
                                              "description": "Students need a simple online booking system for lab equipment.",
-                                             "due_date": future()}, headers=sup)
+                                             "due_date": future(), "funded": "no"}, headers=sup)
     assert r.status_code == 201
     ch = r.json["challenge"]
-    assert ch["funded"] == "none" and ch["status"] == "Submitted" and ch["team"] == []
+    assert ch["funded"] is False and ch["status"] == "Submitted" and ch["team"] == []
     assert ch["supervisor"]
 
 
@@ -147,17 +150,20 @@ def test_students_work_only_on_allocated_challenges(client, login):
     assert client.post("/api/requests", json={"challenge": open_code}, headers=stu).status_code == 404
 
 
-def test_meeting_invites_everyone_and_uses_modes(client, login):
+def test_meeting_invites_everyone_and_uses_venue(client, login):
     sup = login("DCC00011")
     code = next(c["id"] for c in client.get("/api/dashboard/supervisor", headers=sup).json["challenges"] if c["status"] == "In Progress")
-    base = {"challenge": code, "title": "Check-in", "people": ["Not an invitee"], "date": next_weekday(3), "start": "11:00", "mins": 60, "mode": "Online"}
+    base = {"challenge": code, "title": "Check-in", "people": ["Not an invitee"], "date": next_weekday(3), "start": "11:00", "mins": 60, "venue": "Lab DC-002"}
     r = client.post("/api/meetings", json=base, headers=sup)
     assert r.status_code == 201
     m = r.json["meeting"]
-    assert m["mode"] == "Online" and len(m["people"]) >= 3
+    assert m["venue"] == "Lab DC-002" and len(m["people"]) >= 3
     assert "Dr Sipho Ndlovu" in m["people"] and "Not an invitee" not in m["people"]
-    bad = client.post("/api/meetings", json={**base, "mode": "Lab DC-003"}, headers=sup)
-    assert bad.status_code == 422 and "mode" in bad.json["fields"]
+    bad = client.post("/api/meetings", json={**base, "venue": ""}, headers=sup)                       # venue is required
+    assert bad.status_code == 422 and "venue" in bad.json["fields"]
+    clash = client.post("/api/meetings", json={**base, "venue": "lab dc-002", "start": "11:30"}, headers=sup)   # double booking
+    assert clash.status_code == 422 and "venue" in clash.json["fields"]
+    assert client.post("/api/meetings", json={**base, "venue": "Lab DC-002", "start": "12:00"}, headers=sup).status_code == 201
     student_nos = {"Ms Amahle Mthembu": "DCC00002", "Mr Lwazi Dube": "DCC00004", "Mr Thando Khumalo": "DCC00005"}
     rep_nos = {"Ms Sbongokuhle Msomi": "DCC00003", "Mr Sizwe Mthethwa": "DCC00008", "Ms Palesa Molefe": "DCC00009", "Mr Kagiso Nkosi": "DCC00010"}
     stu = login(next(student_nos[p] for p in m["people"] if p in student_nos))
@@ -179,10 +185,18 @@ def test_roles_are_enforced(client, login):
     assert client.get("/api/dashboard/student", headers=rep).status_code == 403
     assert client.get("/api/dashboard/representative", headers=stu).status_code == 403
     assert client.get("/api/dashboard/supervisor", headers=stu).status_code == 403
-    assert client.get("/api/dashboard/admin", headers=sup).status_code == 404
+    adm = login("DCC00000", "Admin@2026")
+    assert client.get("/api/me", headers=adm).json["role"] == "admin"
+    assert client.get("/api/dashboard/admin", headers=adm).status_code == 200
+    for headers in (stu, rep, sup):
+        assert client.get("/api/dashboard/admin", headers=headers).status_code == 403
+        assert client.get("/api/approvals/audit", headers=headers).status_code == 403
+        assert client.get("/api/approvals/users", headers=headers).status_code == 403
+    audit = client.get("/api/approvals/audit?q=locked", headers=adm)
+    assert audit.status_code == 200 and all("locked" in (a["who"] + a["text"]).lower() for a in audit.json)
 
     body = {"title": "A role test challenge for the community", "description": "A detailed description of this challenge for testing.",
-            "due_date": future(), "funded": "yes"}
+            "due_date": future(), "funded": "yes", "budget": 10000}
     assert client.post("/api/challenges", json=body, headers=stu).status_code == 403
     assert client.post("/api/challenges", json=body, headers=rep).status_code == 201
     assert client.post("/api/challenges", json={**body, "funded": "no"}, headers=sup).status_code == 201
@@ -191,12 +205,12 @@ def test_roles_are_enforced(client, login):
     assert client.post("/api/challenges/DCC-000001/review", json={"action": "approve"}, headers=stu).status_code == 403
     assert client.get("/api/approvals/users", headers=stu).status_code == 403
     assert client.get("/api/approvals/users", headers=rep).status_code == 403
-    assert client.get("/api/approvals/users", headers=sup).status_code == 200
+    assert client.get("/api/approvals/users", headers=sup).status_code == 403     # only the administrator manages accounts
 
     assert client.get("/api/meetings", headers=stu).status_code == 200
     assert client.get("/api/meetings", headers=rep).status_code == 200
     assert client.get("/api/meetings", headers=sup).status_code == 200
-    meeting = {"challenge": "DCC-000001", "title": "Role check", "date": next_weekday(5), "start": "11:00", "mins": 60, "mode": "Online"}
+    meeting = {"challenge": "DCC-000001", "title": "Role check", "date": next_weekday(5), "start": "11:00", "mins": 60, "venue": "Online (Teams)"}
     assert client.post("/api/meetings", json=meeting, headers=stu).status_code == 403
     assert client.post("/api/meetings", json=meeting, headers=rep).status_code == 403
     assert client.post("/api/meetings", json=meeting, headers=sup).status_code == 422   # not this supervisor's challenge
@@ -205,3 +219,27 @@ def test_roles_are_enforced(client, login):
 def test_public_overview_has_no_personal_contact_details(client):
     data = client.get("/api/public/overview").json["challenges"]
     assert data and all("email" not in c and "phone" not in c for c in data)
+
+
+def test_funding_and_budget_rules(client, login):
+    rep, sup = login("DCC00003"), login("DCC00011")
+    base = {"title": "Funding rules test challenge", "description": "A detailed description of this challenge for testing.", "due_date": future()}
+    # representatives must answer the funding question
+    r = client.post("/api/challenges", json=base, headers=rep)
+    assert r.status_code == 422 and "funded" in r.json["fields"]
+    # "yes" needs a budget amount
+    r = client.post("/api/challenges", json={**base, "funded": "yes"}, headers=rep)
+    assert r.status_code == 422 and "budget" in r.json["fields"]
+    r = client.post("/api/challenges", json={**base, "funded": "yes", "budget": "-5"}, headers=rep)
+    assert r.status_code == 422 and "budget" in r.json["fields"]
+    r = client.post("/api/challenges", json={**base, "funded": "yes", "budget": "R 25 000"}, headers=rep)
+    assert r.status_code == 201 and r.json["challenge"]["budget"] == 25000
+    assert client.post("/api/challenges", json={**base, "funded": "no"}, headers=rep).status_code == 201
+    # supervisors: funding is required too, and "yes" needs a budget
+    r = client.post("/api/challenges", json=base, headers=sup)
+    assert r.status_code == 422 and "funded" in r.json["fields"]
+    assert client.post("/api/challenges", json={**base, "funded": "no"}, headers=sup).status_code == 201
+    r = client.post("/api/challenges", json={**base, "funded": "yes"}, headers=sup)
+    assert r.status_code == 422 and "budget" in r.json["fields"]
+    r = client.post("/api/challenges", json={**base, "funded": "yes", "budget": 1500.5}, headers=sup)
+    assert r.status_code == 201 and r.json["challenge"]["budget"] == 1500.5
