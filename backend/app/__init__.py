@@ -1,13 +1,18 @@
-"""Development Challenges Community — REST API (Flask).
+"""Development Challenges Community — Flask API and static frontend.
 
-The front end is a separate static site; it calls this API over HTTP (JSON) with a Bearer token.
+The front end calls the API over HTTP (JSON) with a Bearer token.
 """
 import os
 
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
+from werkzeug.routing import PathConverter
 
 from . import db, errors
 from .config import Config
+
+
+class FrontendPathConverter(PathConverter):
+    regex = r"(?!(?:api)(?:/|$))[^/].*?"
 
 
 def create_app(config=Config, **overrides):
@@ -34,7 +39,18 @@ def create_app(config=Config, **overrides):
     for bp in (auth.bp, challenges.bp, meetings.bp, notifications.bp, approvals.bp, dashboard.bp):
         app.register_blueprint(bp)
 
-    # CORS: the front end is served from a different origin
+    frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
+    app.url_map.converters["frontend_path"] = FrontendPathConverter
+
+    @app.get("/")
+    def frontend_index():
+        return send_from_directory(frontend_dir, "index.html")
+
+    @app.get("/<frontend_path:filename>")
+    def frontend_file(filename):
+        return send_from_directory(frontend_dir, filename)
+
+    # CORS: the front end may run on a different origin during development.
     allowed = [o.strip() for o in app.config["CORS_ORIGINS"].split(",")]
 
     @app.after_request

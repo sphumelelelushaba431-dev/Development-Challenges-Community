@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: development-challenges-community
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: gunicorn --chdir backend run:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health
+    disk:
+      name: dcc-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE
+        value: /var/data/dcc.sqlite3
+      - key: UPLOAD_FOLDER
+        value: /var/data/uploads
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS
+        value: ""
+      - key: SEED_DEMO_DATA
+        value: "true"

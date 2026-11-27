@@ -7,7 +7,7 @@ dcc-system/
 ├── frontend/   the web app — HTML, CSS and JavaScript only (static files)
 └── backend/    the REST API — Python Flask + SQLite
 ```
-The two run separately. The front end talks to the backend over HTTP (JSON) with a sign-in token.
+For local development they run separately; the Render Blueprint serves both together. The front end talks to the backend over HTTP (JSON) with a sign-in token.
 
 ## Quick start (two terminals)
 
@@ -28,6 +28,16 @@ python -m http.server 3000      # or: npx serve -l 3000 .
 Open **http://localhost:3000**.
 
 The front end finds the backend through `frontend/js/config.js` (`apiBase: 'http://127.0.0.1:5000/api'`). If the backend runs somewhere else, change that line.
+
+## Deploy on Render
+
+The root `render.yaml` deploys the frontend and API together as one Flask web service. It uses a persistent disk for the SQLite database and uploads, and seeds demo accounts on first start.
+
+1. Push this repository to GitHub and in Render select **New → Blueprint**, then connect the repository and deploy.
+2. When prompted, enter a strong `ADMIN_PASSWORD`. Render generates the `SECRET_KEY`.
+3. Open the Render service URL when the deploy is live. The frontend uses the same service for API requests.
+
+This Blueprint uses a paid Starter web service because SQLite and uploaded files need a persistent disk. Demo accounts use the shared password `Demo@1234`; replace or remove demo data before using this deployment with real users or data. The administrator signs in as `DCC00000` using the `ADMIN_PASSWORD` entered during setup.
 
 ## Demo accounts
 **Administrator:** Member no. **`DCC00000`**, password **`Admin@2026`** (change it with the `ADMIN_PASSWORD` environment variable before the database is created, or under Settings after signing in). Only the administrator can approve, decline or unlock user accounts and open the **Audit log**.

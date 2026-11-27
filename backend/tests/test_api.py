@@ -37,6 +37,12 @@ def test_health_and_cors(client):
     assert r.json == {"status": "ok"} and r.headers["Access-Control-Allow-Origin"]
 
 
+def test_frontend_is_served_and_unknown_api_paths_stay_404(client):
+    assert b"Development Challenges" in client.get("/").data
+    assert b"apiBase" in client.get("/js/config.js").data
+    assert client.get("/api/not-a-route").status_code == 404
+
+
 def test_auth_required(client):
     assert client.get("/api/dashboard/student").status_code == 401
 
