@@ -2,6 +2,7 @@
 PRAGMA foreign_keys = ON;
 
 DROP TABLE IF EXISTS activity;
+DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS meetings;
 DROP TABLE IF EXISTS requests;
@@ -107,10 +108,32 @@ CREATE TABLE notifications (
 );
 CREATE INDEX idx_notifications_user ON notifications(user_id, is_read);
 
+-- One row per sign-in: how long each member used the system
+CREATE TABLE sessions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  started_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  last_seen  TEXT    NOT NULL DEFAULT (datetime('now')),
+  ended_at   TEXT,
+  end_reason TEXT,                                   -- logout | password | locked
+  ip         TEXT    NOT NULL DEFAULT '',
+  agent      TEXT    NOT NULL DEFAULT ''
+);
+CREATE INDEX idx_sessions_user ON sessions(user_id);
+
+-- Audit log: what was done, by whom, when and (where it applies) how long it took
 CREATE TABLE activity (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   who        TEXT    NOT NULL,
   text       TEXT    NOT NULL,
   kind       TEXT    NOT NULL DEFAULT 'info',        -- ok | bad | warn | info
+  action     TEXT    NOT NULL DEFAULT '',            -- e.g. auth.login, challenge.submit
+  actor_id   INTEGER,
+  actor_no   TEXT    NOT NULL DEFAULT '',
+  actor_role TEXT    NOT NULL DEFAULT '',
+  session_id INTEGER,
+  duration   INTEGER,                                -- seconds
+  ip         TEXT    NOT NULL DEFAULT '',
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX idx_activity_actor ON activity(actor_id);

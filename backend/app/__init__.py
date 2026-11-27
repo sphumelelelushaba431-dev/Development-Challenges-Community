@@ -35,8 +35,8 @@ def create_app(config=Config, **overrides):
     db.init_app(app)
     errors.init_app(app)
 
-    from .routes import approvals, auth, challenges, dashboard, meetings, notifications
-    for bp in (auth.bp, challenges.bp, meetings.bp, notifications.bp, approvals.bp, dashboard.bp):
+    from .routes import approvals, audit, auth, challenges, dashboard, meetings, notifications
+    for bp in (auth.bp, challenges.bp, meetings.bp, notifications.bp, approvals.bp, audit.bp, dashboard.bp):
         app.register_blueprint(bp)
 
     frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))

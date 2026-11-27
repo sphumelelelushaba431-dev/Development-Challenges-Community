@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from ..auth import login_required
 from ..db import execute, jdump, jload, query
 from ..errors import fail
-from ..services import OPEN, challenge_by_code, full_name, notify, team_of, user_by_name_or_no
+from ..services import OPEN, challenge_by_code, full_name, log, notify, team_of, user_by_name_or_no
 
 bp = Blueprint("meetings", __name__, url_prefix="/api/meetings")
 
@@ -102,6 +102,9 @@ def create():
     me = full_name(g.user)
     for u in people:
         notify(u["id"], "meeting", me, "Meeting: %s · %s %s · %s." % (title, day.isoformat(), start, "Venue: " + venue), ch["code"], "M-%d" % mid)
+    log(me, "scheduled “%s” for %s on %s at %s (venue: %s, %d people)." %
+        (title, ch["code"], day.isoformat(), start, venue, len(people)),
+        "info", "meeting.schedule", duration=mins * 60)
     return jsonify({"message": "Meeting scheduled. Everyone invited has been notified.",
                     "meeting": serialize(query("SELECT * FROM meetings WHERE id = ?", (mid,), one=True))}), 201
 
@@ -113,6 +116,8 @@ def cancel(mid):
     if not m or m["supervisor_id"] != g.user["id"]:
         fail("Meeting not found.", 404)
     execute("DELETE FROM meetings WHERE id = ?", (m["id"],))
+    log(full_name(g.user), "cancelled the meeting “%s” on %s at %s." % (m["title"], m["date"], m["start"]), "warn", "meeting.cancel",
+        duration=m["minutes"] * 60)
     for value in jload(m["people"]):
         u = user_by_name_or_no(value)
         if u:

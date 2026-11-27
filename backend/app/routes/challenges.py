@@ -11,7 +11,7 @@ from ..auth import login_required
 from ..db import execute, jload, now, query
 from ..errors import fail
 from ..services import (OPEN, assign_supervisor, challenge_by_code, classify_text, full_name, log,
-                        match_students, notify, notify_supervisors, set_code, store_areas,
+                        match_students, notify, notify_supervisors, seconds_between, set_code, store_areas,
                         student_load, team_of)
 
 bp = Blueprint("challenges", __name__, url_prefix="/api/challenges")
@@ -92,7 +92,7 @@ def auto_allocate_team(ch, by_name=None):
     for s in picked:
         notify(s["id"], "assign", by, "You have been added to “%s”." % ch["title"], ch["code"], ch["code"])
     notify(ch["submitted_by"], "update", by, "A student team has been allocated to “%s”." % ch["title"], ch["code"], ch["code"])
-    log(by, "auto-allocated %s to %s." % (ch["code"], names), "ok")
+    log(by, "auto-allocated %s to %s." % (ch["code"], names), "ok", "challenge.allocate")
     return picked
 
 
@@ -146,7 +146,7 @@ def submit():
     code = set_code(cid)
     store_areas(cid, classification)
     me = full_name(g.user)
-    log(me, "submitted %s “%s”." % (code, title), "info")
+    log(me, "submitted %s “%s”." % (code, title), "info", "challenge.submit")
     if supervisor_id:
         notify(supervisor_id, "alert", me, "New challenge submitted for review: “%s”." % title, code, code)
         sup = query("SELECT * FROM users WHERE id = ?", (supervisor_id,), one=True)
@@ -205,8 +205,10 @@ def review(code):
     _status(ch, "Submitted", "Under Review")
     action, comment = d.get("action"), (d.get("comment") or "").strip()
     me = full_name(g.user)
+    waited = seconds_between(ch["created_at"], now())          # how long the challenge waited for this decision
     if action == "approve":
         execute("UPDATE challenges SET status = 'Unallocated', approved_at = ? WHERE id = ?", (now(), ch["id"]))
+        log(me, "approved %s “%s”." % (code, ch["title"]), "ok", "challenge.approve", duration=waited)
         picked = auto_allocate_team(_get(code), me)
         if not picked:
             notify(ch["submitted_by"], "update", me, "“%s” has been approved; a team is being matched." % ch["title"], code, code)
@@ -215,6 +217,7 @@ def review(code):
         if len(comment) < 3:
             fail("Say what information is needed.", 422, comment="Say what information is needed.")
         execute("UPDATE challenges SET status = 'Pending Information', info_request = ? WHERE id = ?", (comment, ch["id"]))
+        log(me, "asked for more details on %s: %s" % (code, comment), "warn", "challenge.request_info", duration=waited)
         notify(ch["submitted_by"], "alert", me, "More details needed for “%s”: %s" % (ch["title"], comment), code, code)
         msg = "Information requested from the representative."
     elif action == "reject":
@@ -222,7 +225,7 @@ def review(code):
             fail("Give a reason for rejecting.", 422, comment="Give a reason for rejecting.")
         execute("UPDATE challenges SET status = 'Rejected', decision_note = ? WHERE id = ?", (comment, ch["id"]))
         notify(ch["submitted_by"], "update", me, "“%s” was not approved: %s" % (ch["title"], comment), code, code)
-        log(me, "rejected %s." % code, "bad")
+        log(me, "rejected %s: %s" % (code, comment), "bad", "challenge.reject", duration=waited)
         msg = "%s rejected." % code
     else:
         fail("Unknown action.", 422)
@@ -243,6 +246,7 @@ def respond(code):
             ("\n\nAdditional information: " + text, ch["id"]))
     if ch["supervisor_id"]:
         notify(ch["supervisor_id"], "alert", full_name(g.user), "Information added to “%s”." % ch["title"], code, code)
+    log(full_name(g.user), "added the requested details to %s and resubmitted it." % code, "info", "challenge.respond")
     return jsonify({"message": "Information sent — %s is back with the supervisor." % code})
 
 
@@ -273,9 +277,11 @@ def progress(code):
         if ch["supervisor_id"]:
             notify(ch["supervisor_id"], "update", me, "“%s” reached 100%% and is complete." % ch["title"], code, code)
         notify(ch["submitted_by"], "update", me, "“%s” has been completed." % ch["title"], code, code)
-        log(me, "completed %s at 100%%." % code, "ok")
+        log(me, "completed %s at 100%%." % code, "ok", "challenge.complete",
+            duration=seconds_between(ch["allocated_at"] or ch["created_at"], now()))
         return jsonify({"message": "Work completed — %s is now complete." % code})
     execute("UPDATE challenges SET progress = ?, status = 'In Progress' WHERE id = ?", (pct, ch["id"]))
+    log(me, "updated %s to %d%%: %s" % (code, pct, note[:120]), "info", "challenge.progress")
     if ch["supervisor_id"]:
         notify(ch["supervisor_id"], "update", me, "Progress updated to %d%%." % pct, code, code)
     return jsonify({"message": "Progress updated to %d%%." % pct})

@@ -8,8 +8,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from ..auth import login_required, make_token, read_token
 from ..db import execute, jdump, now, query
 from ..errors import fail
+from ..emails import send_registration_email
 from ..nlp.taxonomy import AREAS
-from ..services import full_name, log, me_payload, notify_admins
+from ..services import (end_session, end_user_sessions, full_name, log, me_payload, notify_admins, start_session)
 from ..validators import ACCOUNT_ROLES, EMAIL, GENDERS, MEMBER_NO, ROLES, TITLES, parse_phone, password_problems, valid_sa_id
 
 bp = Blueprint("auth", __name__, url_prefix="/api")
@@ -118,15 +119,34 @@ def register():
     photo = _save_photo(request.files.get("photo"))
 
     member_no = _next_member_no()
-    execute("""INSERT INTO users (member_no, role, title, first_name, surname, gender, id_number, phone, email, organisation, interest,
-               expertise, address, photo, password_hash, status, terms_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending', ?)""",
-            (member_no, role, d["title"], d["first_name"].strip(), d["surname"].strip(), d["gender"], d["id_number"].strip(), phone, email,
-             d["organisation"].strip(), interest, jdump(interests), d["address"].strip(), photo, generate_password_hash(d["password"]), now()))
-    name = "%s %s %s" % (d["title"], d["first_name"].strip(), d["surname"].strip())
-    log(name, "registered as a %s — awaiting approval." % role.title(), "warn")
-    notify_admins("alert", name, "New %s registration waiting for approval." % role, member_no)
-    return jsonify({"member_no": member_no, "status": "pending",
-                    "message": "Registration received. Your member number is %s. You can log in once the administrator approves your account." % member_no}), 201
+    registered_at = now()
+    pending = bool(current_app.config["REQUIRE_APPROVAL"])
+    status = "pending" if pending else "active"
+    uid = execute("""INSERT INTO users (member_no, role, title, first_name, surname, gender, id_number, phone, email, organisation, interest,
+               expertise, address, photo, password_hash, status, terms_at, joined_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                  (member_no, role, d["title"], d["first_name"].strip(), d["surname"].strip(), d["gender"], d["id_number"].strip(), phone, email,
+                   d["organisation"].strip(), interest, jdump(interests), d["address"].strip(), photo, generate_password_hash(d["password"]),
+                   status, registered_at, registered_at))
+    u = query("SELECT * FROM users WHERE id = ?", (uid,), one=True)
+    name = full_name(u)
+    log(name, "registered as a %s%s." % (role.title(), " — awaiting approval" if pending else ""),
+        "warn" if pending else "ok", "auth.register", actor=u)
+    sent, detail = send_registration_email(u)
+    log("System", ("sent the confirmation e-mail to %s." % email) if sent
+        else ("could not send the confirmation e-mail to %s — %s" % (email, detail)),
+        "ok" if sent else "bad", "email.registration", actor=u)
+    if pending:
+        notify_admins("alert", name, "New %s registration waiting for approval." % role, member_no)
+    msg = "Registration received. Your Member ID is %s." % member_no
+    if sent:
+        msg += " A confirmation e-mail with your membership details has been sent to %s." % email
+    else:
+        msg += " We could not send the confirmation e-mail right now, so please write down your Member ID."
+    if pending:
+        msg += " You can log in once the administrator approves your account."
+    else:
+        msg += " You can now log in with your Member ID (or e-mail) and the password you chose."
+    return jsonify({"member_no": member_no, "status": status, "email_sent": sent, "message": msg}), 201
 
 
 @bp.post("/auth/login")
@@ -140,16 +160,20 @@ def login():
     else:
         u = query("SELECT * FROM users WHERE lower(email) = lower(?)", (ident,), one=True)
     if not u:
+        log("System", "failed sign-in for an unknown Member ID / e-mail “%s”." % ident[:80], "bad", "auth.login_failed")
         fail("The Member ID or password is incorrect.", 401)
     if u["status"] == "locked":
+        log(full_name(u), "tried to sign in while the account is locked.", "bad", "auth.login_blocked", actor=u)
         fail("Your account is locked after too many failed attempts. Contact the administrator.", 403)
     if not check_password_hash(u["password_hash"], d["password"]):
         tries = u["failed_logins"] + 1
-        if tries >= current_app.config["MAX_FAILED_LOGINS"]:
+        limit = current_app.config["MAX_FAILED_LOGINS"]
+        if tries >= limit:
             execute("UPDATE users SET failed_logins = ?, status = 'locked', locked_at = ? WHERE id = ?", (tries, now(), u["id"]))
-            log("System", "%d failed login attempts for %s — account locked." % (tries, u["member_no"]), "bad")
+            log("System", "%d failed login attempts for %s — account locked." % (tries, u["member_no"]), "bad", "account.locked", actor=u)
             fail("Too many failed attempts. Your account is now locked; contact the administrator.", 403)
         execute("UPDATE users SET failed_logins = ? WHERE id = ?", (tries, u["id"]))
+        log(full_name(u), "failed sign-in — wrong password (attempt %d of %d)." % (tries, limit), "warn", "auth.login_failed", actor=u)
         fail("The Member ID or password is incorrect.", 401)
     if u["status"] == "pending":
         fail("Your account is waiting for administrator approval.", 403)
@@ -158,8 +182,20 @@ def login():
     if u["role"] not in ACCOUNT_ROLES:
         fail("This account cannot access the workspace.", 403)
     execute("UPDATE users SET failed_logins = 0 WHERE id = ?", (u["id"],))
+    sid = start_session(u)
+    log(full_name(u), "signed in.", "info", "auth.login", actor=u, session_id=sid)
     home = "workspace.html"   # one role-gated workspace for every member
-    return jsonify({"token": make_token(u), "user": me_payload(u), "home": home})
+    return jsonify({"token": make_token(u, sid=sid), "user": me_payload(u), "home": home})
+
+
+@bp.post("/auth/logout")
+@login_required()
+def logout():
+    sid = g.get("session_id")
+    if sid:
+        _s, seconds = end_session(sid, "logout")
+        log(full_name(g.user), "signed out.", "info", "auth.logout", duration=seconds)
+    return jsonify({"message": "You have been logged out."})
 
 
 @bp.post("/auth/forgot-password")
@@ -170,6 +206,7 @@ def forgot_password():
     u = query("SELECT * FROM users WHERE lower(email) = ?", (email,), one=True)
     body = {"message": "If an account exists for %s, a reset link has been sent. It expires in 30 minutes." % email}
     if u:
+        log(full_name(u), "asked for a password-reset link.", "info", "auth.reset_request", actor=u)
         token = make_token(u, salt="reset")
         # Send `token` by e-mail in production (link: reset-password.html?token=...). Shown here only in debug mode.
         current_app.logger.info("Password reset token for %s: %s", u["member_no"], token)
@@ -187,6 +224,8 @@ def reset_password():
         fail("Use " + ", ".join(problems) + ".", 422)
     execute("UPDATE users SET password_hash = ?, failed_logins = 0, status = CASE WHEN status = 'locked' THEN 'active' ELSE status END WHERE id = ?",
             (generate_password_hash(d["password"]), u["id"]))
+    end_user_sessions(u["id"], "password")
+    log(full_name(u), "reset the password with an e-mailed link.", "ok", "auth.reset", actor=u)
     return jsonify({"message": "Your password has been changed. You can log in now."})
 
 
@@ -231,6 +270,7 @@ def update_me():
     execute("UPDATE users SET email = ?, phone = ?, organisation = ?, address = ?, interest = ?, expertise = ?, photo = ? WHERE id = ?",
             (email, phone, (d.get("org") or d.get("organisation")).strip(), (d.get("address") or "").strip(),
              interest, jdump(interests), photo, g.user["id"]))
+    log(full_name(g.user), "updated their profile.", "info", "profile.update")
     return jsonify(me_payload(query("SELECT * FROM users WHERE id = ?", (g.user["id"],), one=True)))
 
 
@@ -245,4 +285,5 @@ def change_password():
         fail("Use " + ", ".join(problems) + ".", 422, new="Use " + ", ".join(problems) + ".")
     execute("UPDATE users SET password_hash = ? WHERE id = ?", (generate_password_hash(d["new"]), g.user["id"]))
     u = query("SELECT * FROM users WHERE id = ?", (g.user["id"],), one=True)
-    return jsonify({"message": "Password changed.", "token": make_token(u)})
+    log(full_name(u), "changed their password.", "ok", "profile.password")
+    return jsonify({"message": "Password changed.", "token": make_token(u, sid=g.get("session_id"))})

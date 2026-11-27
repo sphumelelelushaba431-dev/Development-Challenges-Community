@@ -36,7 +36,7 @@ npm run build:flags
 | `public.html` + `js/public.js` | Public dashboard for visitors: impact metrics, progress strip, previous solutions, submissions by area, date-range calendar, dark mode |
 | `login.html` + `js/login.js` | Login and forgotten password |
 | `register.html` + `js/register.js` | Step 1: Terms and Conditions + POPIA consent. Step 2: the member form |
-| `workspace.html` + `js/workspace.js` | The only page after sign-in. Buttons are gated by the role saved on the account: Student (Solve, Track, Meeting), Representative (Submit, Track, Meeting), Supervisor (Submit, Solve, Track, Meeting). Opening a button fills the empty area below; clicking it again closes the panel. |
+| `workspace.html` + `js/workspace.js` | The only page after sign-in. Buttons are gated by the role saved on the account: Student (Solve, Track, Meeting), Representative (Submit, Track, Meeting), Supervisor (Submit, Solve, Track, Meeting, Audit log). The header title is the only heading of each panel. Opening a button fills the empty area below; clicking it again closes the panel. |
 | `student.html`, `supervisor.html`, `representative.html`, `admin.html` | Old dashboards — redirect to `workspace.html` |
 | `terms.html`, `privacy.html` | Terms and Conditions, and the Privacy Policy (POPIA) |
 

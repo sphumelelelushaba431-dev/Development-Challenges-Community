@@ -13,6 +13,7 @@ backend/instance/
 # Environment and editor files
 .env
 .env.*
+!.env.example
 .DS_Store
 
 # Frontend build dependencies

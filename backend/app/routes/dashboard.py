@@ -52,7 +52,8 @@ def student():
 def supervisor():
     me = g.user
     chs = [_row(ch) for ch in query("SELECT * FROM challenges WHERE supervisor_id = ? ORDER BY due_date", (me["id"],))]
-    events = [{"date": ch["created"], "kind": "sub", "title": ch["title"]} for ch in chs] +              [{"date": ch["completed"], "kind": "done", "title": ch["title"]} for ch in chs if ch["completed"]]
+    events = [{"date": ch["created"], "kind": "sub", "title": ch["title"]} for ch in chs] + \
+             [{"date": ch["completed"], "kind": "done", "title": ch["title"]} for ch in chs if ch["completed"]]
     return jsonify({"me": me_payload(me), "challenges": chs, "cap": current_app.config["SUPERVISOR_CAP"],
                     "load": supervisor_load(me["id"]), "events": events, "notes": for_user(me["id"])})
 

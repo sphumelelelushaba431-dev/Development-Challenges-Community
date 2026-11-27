@@ -1,5 +1,9 @@
 from datetime import date, timedelta
 from io import BytesIO
+import sqlite3
+
+from app import create_app
+from app.config import TestConfig
 
 
 def future(days=40):
@@ -47,23 +51,137 @@ def test_auth_required(client):
     assert client.get("/api/dashboard/student").status_code == 401
 
 
-def test_register_approve_login(client, login):
-    body = dict(role="student", title="Ms", gender="Female", first_name="Lerato", surname="Dlamini", id_number="9001015009086",
-                phone="0712223333", phone_country="ZA", email="lerato@example.com", organisation="University of Zululand", area_of_interest="Research",
-                address="1 Main Road, Empangeni, 3880", password="Strong@123", confirm_password="Strong@123", terms_accepted="yes", popia_consent="yes")
+REGISTRATION = dict(role="student", title="Ms", gender="Female", first_name="Lerato", surname="Dlamini", id_number="9001015009086",
+                    phone="0712223333", phone_country="ZA", email="Lerato@Example.com", organisation="University of Zululand", area_of_interest="Research",
+                    address="1 Main Road, Empangeni, 3880", password="Strong@123", confirm_password="Strong@123", terms_accepted="yes", popia_consent="yes")
+
+
+def test_register_then_login_with_own_credentials_and_email(app, client):
+    app.config["REQUIRE_APPROVAL"] = False
+    body = REGISTRATION
     bad = client.post("/api/auth/register", json={**body, "terms_accepted": "", "id_number": "123"})
     assert bad.status_code == 422 and "id_number" in bad.json["fields"] and "terms" in bad.json["fields"]
     bad_phone = client.post("/api/auth/register", json={**body, "phone_country": "ZZ"})
     assert bad_phone.status_code == 422 and "phone" in bad_phone.json["fields"]
     r = client.post("/api/auth/register", json=body)
-    assert r.status_code == 201
+    assert r.status_code == 201 and r.json["status"] == "active" and r.json["email_sent"] is True
     no = r.json["member_no"]
+    assert no in r.json["message"]
+
+    # confirmation e-mail with the member's ID and details — never the password
+    mail = app.extensions["outbox"][-1]
+    assert mail["To"] == "lerato@example.com" and no in mail["Subject"]
+    text = mail.get_body(("plain",)).get_content()
+    assert no in text and "Ms Lerato Dlamini" in text and "Student" in text and "Strong@123" not in text
+
+    # the credentials chosen at registration work straight away — by Member ID or by e-mail
+    assert client.post("/api/auth/login", json={"member_id": no, "password": "Strong@123"}).status_code == 200
+    assert client.post("/api/auth/login", json={"member_id": no.lower(), "password": "Strong@123"}).status_code == 200
+    assert client.post("/api/auth/login", json={"email": "LERATO@example.com", "password": "Strong@123"}).status_code == 200
+    assert client.post("/api/auth/login", json={"member_id": no, "password": "Wrong@123"}).status_code == 401
+    assert client.post("/api/auth/register", json=body).json["fields"]["email"]          # e-mail already registered
+
+
+def test_existing_database_applies_both_audit_and_admin_migrations(tmp_path):
+    database = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(database) as legacy:
+        legacy.executescript("""
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                member_no TEXT NOT NULL UNIQUE,
+                role TEXT NOT NULL CHECK (role IN ('student','supervisor','representative')),
+                first_name TEXT NOT NULL,
+                surname TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                phone TEXT NOT NULL DEFAULT '',
+                organisation TEXT NOT NULL DEFAULT '',
+                password_hash TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                failed_logins INTEGER NOT NULL DEFAULT 0,
+                available INTEGER NOT NULL DEFAULT 1,
+                record REAL NOT NULL DEFAULT 0.8,
+                terms_at TEXT,
+                joined_at TEXT NOT NULL DEFAULT (datetime('now')),
+                locked_at TEXT
+            );
+            CREATE TABLE challenges (id INTEGER PRIMARY KEY AUTOINCREMENT);
+            CREATE TABLE activity (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                who TEXT NOT NULL,
+                text TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'info',
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            INSERT INTO users (member_no, role, first_name, surname, email, password_hash)
+            VALUES ('DCC00001', 'supervisor', 'Legacy', 'Supervisor', 'legacy@example.com', 'hash');
+        """)
+
+    create_app(TestConfig, DATABASE=str(database), UPLOAD_FOLDER=str(tmp_path / "uploads"))
+
+    with sqlite3.connect(database) as migrated:
+        role_check = migrated.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").fetchone()[0]
+        activity_columns = {row[1] for row in migrated.execute("PRAGMA table_info(activity)")}
+        challenge_columns = {row[1] for row in migrated.execute("PRAGMA table_info(challenges)")}
+        assert "'admin'" in role_check
+        assert {"action", "actor_id", "session_id", "duration", "ip"} <= activity_columns
+        assert "budget" in challenge_columns
+        assert migrated.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
+        assert migrated.execute("SELECT role FROM users WHERE member_no = 'DCC00000'").fetchone()[0] == "admin"
+        assert migrated.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 2
+        assert migrated.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_register_with_approval_required(app, client, login):
+    app.config["REQUIRE_APPROVAL"] = True
+    r = client.post("/api/auth/register", json=REGISTRATION)
+    assert r.status_code == 201 and r.json["status"] == "pending"
+    no = r.json["member_no"]
+    registration_mail = app.extensions["outbox"][-1]
+    assert "administrator has approved" in registration_mail.get_body(("plain",)).get_content()
     assert client.post("/api/auth/login", json={"member_id": no, "password": "Strong@123"}).status_code == 403
     sup, rep = login("DCC00001"), login("DCC00003")
     assert client.post("/api/approvals/users/%s/approve" % no, headers=sup).status_code == 403   # supervisors cannot manage accounts
     assert client.post("/api/approvals/users/%s/approve" % no, headers=rep).status_code == 403   # nor can representatives
     assert client.post("/api/approvals/users/%s/approve" % no, headers=login("DCC00000", "Admin@2026")).status_code == 200
+    assert "approved" in app.extensions["outbox"][-1]["Subject"]
     assert client.post("/api/auth/login", json={"member_id": no, "password": "Strong@123"}).status_code == 200
+
+
+def test_audit_log_tracks_who_what_when_and_how_long(client, login):
+    stu = login("DCC00002")
+    assert client.get("/api/me", headers=stu).status_code == 200
+    assert client.post("/api/auth/login", json={"member_id": "DCC00004", "password": "nope"}).status_code == 401
+    assert client.post("/api/auth/logout", headers=stu).status_code == 200
+    assert client.get("/api/me", headers=stu).status_code == 401                     # a logged-out token stops working
+
+    sup = login("DCC00001")
+    admin = login("DCC00000", "Admin@2026")
+    for h in (stu, login("DCC00003"), sup):
+        assert client.get("/api/audit/log", headers=h).status_code in (401, 403)
+    entries = client.get("/api/audit/log?member=DCC00002", headers=admin).json["entries"]
+    actions = [e["action"] for e in entries]
+    assert "auth.login" in actions and "auth.logout" in actions
+    e = next(e for e in entries if e["action"] == "auth.logout")
+    assert e["who"] == "Ms Amahle Mthembu" and e["role"] == "Student" and e["at"] and e["duration"] is not None
+    assert next(e for e in entries if e["action"] == "auth.login")["session"] in ("ended", "active", "idle")
+    failed = client.get("/api/audit/log?area=auth&q=wrong password", headers=admin).json["entries"]
+    assert any(e["member"] == "DCC00004" for e in failed)
+
+    users = client.get("/api/audit/users", headers=admin).json["users"]
+    amahle = next(u for u in users if u["id"] == "DCC00002")
+    assert amahle["sessions"] >= 1 and amahle["last_login"] and amahle["time_online"] >= 0
+
+    # Only the administrator can lock an account; locking ends existing sessions.
+    stu2 = login("DCC00005")
+    assert client.post("/api/approvals/users/DCC00005/lock", json={"reason": "Shared account"}, headers=sup).status_code == 403
+    assert client.post("/api/approvals/users/DCC00005/lock", json={"reason": "Shared account"}, headers=admin).status_code == 200
+    assert client.get("/api/me", headers=stu2).status_code in (401, 403)
+    assert client.post("/api/auth/login", json={"member_id": "DCC00005", "password": "Demo@1234"}).status_code == 403
+    assert client.post("/api/approvals/users/DCC00000/lock", json={"reason": "self"}, headers=admin).status_code == 403
+    assert client.post("/api/approvals/users/DCC00005/unlock", headers=admin).status_code == 200
+    assert client.post("/api/auth/login", json={"member_id": "DCC00005", "password": "Demo@1234"}).status_code == 200
+    log = client.get("/api/audit/log?area=account", headers=admin).json["entries"]
+    assert {"account.lock", "account.unlock"} <= {e["action"] for e in log}
 
 
 def test_member_can_upload_profile_photo(client, login):

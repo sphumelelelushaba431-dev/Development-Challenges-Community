@@ -6,7 +6,7 @@
   var live = !!(window.API && API.on());
   var d = function (n) { return new Date(Date.now() + n * U.DAY); };
 
-  var role = null, ME = null, D = null, MEET = null;
+  var role = null, ME = null, D = null, MEET = null, AUD = null;
   var active = null, sel = null;
 
   var ALL_NAV = [['submit', 'Submit'], ['solve', 'Solve'], ['track', 'Track'], ['meetings', 'Meeting'], ['audit', 'Audit log']];
@@ -66,7 +66,8 @@
   var formCard = function (title, inner, actions) {
     return U.card({ id: 'wsform', title: title, body: '<div class="mt-2">' + inner + '</div><div class="ws-form-actions">' + actions + '</div>' });
   };
-  var panelHead = function (key, desc) {
+  // The header title is the panel's only heading; nothing is repeated inside the panel.
+  var panelHead = function (key) {
     var t = TITLES[key] || 'Workspace', pt = document.getElementById('page-title');
     if (pt) { pt.textContent = t; document.title = t + ' — Development Challenges Community'; }
     return '';   // the panel name is already shown in the top bar, so no heading block (and no empty space) above the cards
@@ -114,6 +115,7 @@
     return API.get('/dashboard/' + role).then(function (data) {
       D = data; ME = D.me; normalize(); U.shell(shellCfg()); U.serverNotes(D.notes, noteOpener);
       if (active === 'meetings') return API.get('/meetings').then(function (m) { MEET = m; renderPanel(); });
+      if (active === 'audit') return loadAudit();
       renderPanel();
     }).catch(API.fail);
   }
@@ -133,6 +135,7 @@
     if (!force && active === key) { active = null; sel = null; renderNav(); renderEmpty(); return; }
     active = key; sel = null; renderNav();
     if (key === 'meetings') { openMeetings(); return; }
+    if (key === 'audit') { openAudit(); return; }
     renderPanel();
   }
   function openMeetings() {
@@ -184,8 +187,8 @@
       return [U.cell(c.title, c.id + (assigned ? ' · your team' : '')), dueCell(c.due), action];
     });
     var cols = [['Challenge', 'minmax(0,1fr)'], ['Deadline', '100px'], ['Action', '112px']];
-    var html = panelHead('solve', 'Open challenges. You can work on a challenge once your team is assigned.') +
-      U.card({ id: 'op', title: 'Challenges to solve', count: open.length, body: U.table(cols, rows, 'No open challenges right now.') });
+    var html = panelHead('solve') +
+      U.card({ id: 'op', title: 'Open challenges', count: open.length, body: U.table(cols, rows, 'No open challenges right now.') });
     if (sel && sel.kind === 'progress') html += progressForm();
     return html;
   }
@@ -197,7 +200,7 @@
         '<button data-pick="progress|' + esc(c.id) + '" class="btn btn-sm w-full">Update</button>'];
     });
     var cols = [['Challenge', 'minmax(0,1fr)'], ['Status', '112px'], ['Progress', '132px'], ['Deadline', '100px'], ['Action', '100px']];
-    var html = panelHead('track', 'Your assigned challenge and your team’s progress.') +
+    var html = panelHead('track') +
       U.card({ id: 'st', title: 'My work', count: mine.length, body: U.table(cols, rows, 'No challenge assigned yet.') });
     if (sel && sel.kind === 'progress') html += progressForm();
     return html;
@@ -214,7 +217,7 @@
   /* ---------- representative ---------- */
   function repSubmit() {
     var info = (D.subs || []).filter(function (c) { return c.status === 'Pending Information'; });
-    var html = panelHead('submit', 'Submit a challenge for review.');
+    var html = panelHead('submit');
     if (info.length) html += U.card({ id: 'info', title: 'More details requested', count: info.length, tone: 'warn', countRight: true,
       body: U.list(info.map(function (c) {
         return '<div class="min-w-0 flex-1">' + U.cell(c.title, esc(c.request || ''), 'warn') + '</div><button data-pick="respond|' + esc(c.id) + '" class="btn btn-sm w-28 shrink-0">Respond</button>';
@@ -242,7 +245,7 @@
   function respondForm() {
     var c = findCh(sel.id); if (!c) return '';
     return formCard('Add more details — ' + c.id,
-      '<p class="mb-1 font-semibold">' + esc(c.title) + '</p><p class="ws-sec-title">Requested by the supervisor</p><p class="ws-quote mb-3">' + esc(c.request || '') + '</p>' +
+      '<p class="mb-1 font-semibold">' + esc(c.title) + '</p><p class="ws-quote mb-3"><b>Supervisor’s request:</b> ' + esc(c.request || '') + '</p>' +
       '<div class="ws-field"><label class="label" for="f-text">Your response <span class="text-red-600">*</span></label><textarea id="f-text" rows="3" class="input"></textarea><span id="f-text-err" class="err"></span></div>',
       cancelBtn + btn('Send & resubmit', 'respond', null, 'primary'));
   }
@@ -252,7 +255,7 @@
       var sub = c.id + (teamText(c) ? ' · ' + esc(teamText(c)) : '') + (c.supervisor ? ' · ' + esc(c.supervisor) : '');
       return [U.cell(c.title, sub), U.badge(label(c.status)), bar(c.pct), U.dayChip(c.due)];
     });
-    return panelHead('track', 'Progress of the challenges you submitted.') +
+    return panelHead('track') +
       U.card({ id: 'rt', title: 'My submissions', count: subs.length, body: U.list(rows, 'You have not submitted a challenge yet.') });
   }
 
@@ -375,9 +378,9 @@
       return [U.cell(c.title, sub), U.badge(label(c.status)), bar(c.pct), dueCell(c.due),
         '<button data-view="' + esc(c.id) + '" class="btn btn-sm w-full">View</button>'];
     });
-    var html = panelHead('solve', 'Review submissions. Approved challenges are assigned a student team automatically.') +
+    var html = panelHead('solve') +
       U.card({ id: 'rv', title: 'Awaiting review', count: review.length, body: U.list(rows, 'Nothing to review.') }) +
-      U.card({ id: 'op', title: 'Challenges being solved', count: open.length,
+      U.card({ id: 'op', title: 'In progress', count: open.length,
         body: U.table([['Challenge', 'minmax(0,1fr)'], ['Status', '112px'], ['Progress', '132px'], ['Deadline', '100px'], ['Action', '100px']], openRows, 'No open challenges.') });
     if (sel && sel.kind === 'review') html += reviewForm();
     return html;
@@ -398,7 +401,7 @@
       var sub = c.id + (teamText(c) ? ' · ' + esc(teamText(c)) : '') + (c.by ? ' · ' + esc(c.by) : '');
       return [U.cell(c.title, sub), U.badge(label(c.status)), bar(c.pct), dueCell(c.due)];
     });
-    return panelHead('track', 'Overall progress of active challenges.') +
+    return panelHead('track') +
       U.card({ id: 'pt', title: 'Active challenges', count: active.length,
         body: U.table([['Challenge', 'minmax(0,1fr)'], ['Status', '112px'], ['Progress', '132px'], ['Deadline', '100px']], rows, 'No active challenges.') }) +
       '<p class="mt-3 text-xs text-slate-500">Capacity ' + (D.load || 0) + ' / ' + (D.cap || 5) + '</p>';
@@ -414,9 +417,9 @@
         '<button data-mopen="' + esc(m.id) + '" class="btn btn-sm shrink-0">Details</button>' +
         '<button data-mcancel="' + esc(m.id) + '" class="btn btn-sm shrink-0 border-red-200 text-red-700 hover:bg-red-50">Cancel</button></div>';
     });
-    return panelHead('meetings', 'Schedule meetings. Everyone involved is invited automatically.') +
+    return panelHead('meetings') +
       bookingForm() +
-      U.card({ id: 'mt', title: 'Upcoming meetings', count: mine.length,
+      U.card({ id: 'mt', title: 'Upcoming', count: mine.length,
         body: rows.length ? '<div class="mt-2">' + rows.join('') + '</div>' : '<p class="py-6 text-center text-sm text-slate-500">No meetings scheduled.</p>' });
   }
   function bookingForm() {
@@ -433,6 +436,170 @@
       '<div class="ws-field"><label class="label" for="m-v">Venue <span class="text-red-600">*</span></label><input id="m-v" class="input" maxlength="120"><span id="m-v-err" class="err"></span></div>' +
       '<div class="ws-field"><label class="label" for="m-a">Agenda <span class="ws-hint">(optional)</span></label><textarea id="m-a" rows="2" class="input"></textarea></div>' +
       '<div class="ws-form-actions">' + btn('Schedule meeting', 'bookmeeting', null, 'primary') + '</div></section>';
+  }
+
+
+  /* ---------- supervisor audit log: manage members + every activity (who, what, when, how long) ---------- */
+  var AREA_LABEL = { auth: 'Access', account: 'Accounts', challenge: 'Challenges', meeting: 'Meetings', profile: 'Profile', email: 'E-mail' };
+  var STATUS_LABEL = { active: 'Active', pending: 'Pending', locked: 'Locked', rejected: 'Declined' };
+  var STATUS_CLS = { active: 'aud-st ok', pending: 'aud-st warn', locked: 'aud-st bad', rejected: 'aud-st off' };
+  var DOT = { ok: '#16a34a', bad: '#dc2626', warn: '#eab308', info: '#2b4de0' };
+  var PAGE = 50;
+  function dur(sec) {
+    if (sec == null || sec === '') return '<span class="text-slate-400">—</span>';
+    sec = Math.max(0, Math.round(+sec));
+    if (sec < 60) return sec + ' s';
+    var m = Math.round(sec / 60); if (m < 60) return m + ' min';
+    var h = Math.floor(m / 60); m = m % 60; if (h < 48) return h + ' h' + (m ? ' ' + m + ' min' : '');
+    return Math.round(h / 24) + ' days';
+  }
+  function when(ts) {
+    var t = ts instanceof Date ? ts : API.date ? API.date(ts) : new Date(ts);
+    if (!t || isNaN(t)) return '—';
+    return t.toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+      t.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+  }
+  function openAudit() {
+    AUD = AUD || { q: '', area: '', member: '', uq: '', ust: '', limit: PAGE };
+    AUD.limit = PAGE;
+    loadAudit();
+  }
+  function auditQuery() {
+    var q = [];
+    if (AUD.q) q.push('q=' + encodeURIComponent(AUD.q));
+    if (AUD.area) q.push('area=' + encodeURIComponent(AUD.area));
+    if (AUD.member) q.push('member=' + encodeURIComponent(AUD.member));
+    q.push('limit=' + AUD.limit);
+    return '?' + q.join('&');
+  }
+  function loadAudit(logOnly) {
+    if (!live) {
+      var demo = demoAudit();
+      AUD.users = demo.users; AUD.log = filterDemoLog(demo.entries);
+      return logOnly ? paintAudit('log') : renderPanel();
+    }
+    var reqs = [API.get('/audit/log' + auditQuery())];
+    if (!logOnly) reqs.push(API.get('/audit/users'));
+    return Promise.all(reqs).then(function (r) {
+      AUD.log = r[0];
+      if (r[1]) { AUD.users = r[1].users; AUD.approval = r[1].require_approval; }
+      if (logOnly) paintAudit('log'); else renderPanel();
+    }).catch(API.fail);
+  }
+  function filterDemoLog(all) {
+    var q = AUD.q.toLowerCase(), out = all.filter(function (e) {
+      return (!AUD.member || e.member === AUD.member) && (!AUD.area || e.action.indexOf(AUD.area + '.') === 0) &&
+        (!q || (e.who + ' ' + e.text + ' ' + e.member).toLowerCase().indexOf(q) > -1);
+    });
+    return { entries: out.slice(0, AUD.limit), total: out.length };
+  }
+  function auditPanel() {
+    panelHead('audit');
+    var users = AUD && AUD.users || [];
+    var statusOpts = '<option value="">All statuses</option>' + Object.keys(STATUS_LABEL).map(function (k) {
+      return '<option value="' + k + '"' + (AUD.ust === k ? ' selected' : '') + '>' + STATUS_LABEL[k] + '</option>'; }).join('');
+    var areaOpts = '<option value="">All activity</option>' + Object.keys(AREA_LABEL).map(function (k) {
+      return '<option value="' + k + '"' + (AUD.area === k ? ' selected' : '') + '>' + AREA_LABEL[k] + '</option>'; }).join('');
+    var counts = { active: 0, pending: 0, locked: 0, online: 0 };
+    users.forEach(function (u) { if (counts[u.status] != null) counts[u.status]++; if (u.online) counts.online++; });
+    var summary = '<div class="aud-sum">' +
+      [['Members', users.length], ['Online now', counts.online], ['Pending', counts.pending], ['Locked', counts.locked]].map(function (k) {
+        return '<div><span>' + k[0] + '</span><b>' + k[1] + '</b></div>'; }).join('') + '</div>';
+    return summary +
+      U.card({ id: 'aud-u', title: 'Members', count: users.length, right:
+        '<div class="aud-filters"><input id="aud-uq" class="input" type="search" placeholder="Search name, ID or e-mail" value="' + esc(AUD.uq) + '" aria-label="Search members">' +
+        '<select id="aud-ust" class="input" aria-label="Filter by status">' + statusOpts + '</select></div>',
+        body: '<div id="aud-users">' + auditUsersTable() + '</div>' }) +
+      U.card({ id: 'aud-l', title: 'Activity', right:
+        '<div class="aud-filters"><input id="aud-q" class="input" type="search" placeholder="Search activity" value="' + esc(AUD.q) + '" aria-label="Search activity">' +
+        '<select id="aud-area" class="input" aria-label="Filter by type">' + areaOpts + '</select></div>',
+        body: '<div id="aud-log">' + auditLogTable() + '</div>' });
+  }
+  function auditUsersTable() {
+    var q = (AUD.uq || '').toLowerCase();
+    var users = (AUD.users || []).filter(function (u) {
+      return (!AUD.ust || u.status === AUD.ust) && (!q || (u.name + ' ' + u.id + ' ' + u.email + ' ' + u.org).toLowerCase().indexOf(q) > -1);
+    });
+    var meId = ME.profile && ME.profile.id;
+    var rows = users.map(function (u) {
+      var acts = '<button data-aud="history|' + esc(u.id) + '" class="btn btn-sm">Activity</button>';
+      if (u.status === 'pending') acts += '<button data-aud="approve|' + esc(u.id) + '" class="btn btn-primary btn-sm">Approve</button><button data-aud="decline|' + esc(u.id) + '" class="btn btn-sm border-red-200 text-red-700 hover:bg-red-50">Decline</button>';
+      else if (u.status === 'locked') acts += '<button data-aud="unlock|' + esc(u.id) + '" class="btn btn-primary btn-sm">Unlock</button>';
+      else if (u.status === 'active' && u.id !== meId) acts += '<button data-aud="lock|' + esc(u.id) + '" class="btn btn-sm border-red-200 text-red-700 hover:bg-red-50">Lock</button>';
+      var st = '<span class="' + (STATUS_CLS[u.status] || 'aud-st') + '">' + (STATUS_LABEL[u.status] || esc(u.status)) + '</span>' +
+        (u.online ? ' <span class="aud-online" title="Signed in now">online</span>' : '') +
+        (u.why ? '<div class="truncate text-[11.5px] text-slate-500">' + esc(u.why) + '</div>' : '');
+      return [U.cell(u.name, esc(u.id) + ' · ' + esc(u.email)), esc(u.role), st,
+        '<span class="text-slate-700">' + (u.last_login ? when(u.last_login) : '<span class="text-slate-400">Never</span>') + '</span>',
+        (u.sessions ? '<span class="tabular-nums text-slate-700">' + dur(u.time_online) + '<span class="block text-[11.5px] text-slate-500">' + u.sessions + ' sign-in' + (u.sessions === 1 ? '' : 's') + '</span></span>' : '<span class="text-slate-400">—</span>'),
+        '<div class="aud-acts">' + acts + '</div>'];
+    });
+    return '<div class="aud-scroll">' + U.table([['Member', 'minmax(200px,1fr)'], ['Role', '110px'], ['Status', '120px'], ['Last sign-in', '150px'], ['Time signed in', '120px'], ['Action', '240px']],
+      rows, 'No members match.') + '</div>';
+  }
+  function auditLogTable() {
+    var L = AUD.log || { entries: [], total: 0 }, list = L.entries || [];
+    var rows = list.map(function (e) {
+      var who = e.member ? esc(e.member) + (e.role ? ' · ' + esc(e.role) : '') : 'System';
+      var d = dur(e.duration);
+      if (e.action === 'auth.login' && e.session) d += '<span class="block text-[11.5px] ' + (e.session === 'active' ? 'text-green-700' : 'text-slate-500') + '">' + (e.session === 'active' ? 'still signed in' : e.session === 'idle' ? 'no recent activity' : 'signed out') + '</span>';
+      return ['<span class="tabular-nums text-slate-700">' + when(e.at) + '</span>',
+        U.cell(e.who, who),
+        '<div class="flex min-w-0 items-start gap-2"><i class="mt-1.5 inline-block size-2 shrink-0 rounded-full" style="background:' + (DOT[e.kind] || DOT.info) + '"></i>' +
+          '<div class="min-w-0"><div class="aud-text text-slate-800">' + esc(e.text) + '</div><div class="text-[11.5px] text-slate-500">' + esc(AREA_LABEL[(e.action || '').split('.')[0]] || 'Other') + (e.ip ? ' · ' + esc(e.ip) : '') + '</div></div></div>',
+        '<span class="tabular-nums text-slate-700">' + d + '</span>'];
+    });
+    var chip = AUD.member ? '<div class="aud-chip">Showing activity for <b>' + esc(AUD.member) + '</b><button data-aud="clear|" class="btn btn-sm">Show everyone</button></div>' : '';
+    var more = list.length < (L.total || 0) ? '<div class="mt-3 text-center"><button data-aud="more|" class="btn btn-sm">Show more (' + ((L.total || 0) - list.length) + ' older)</button></div>' : '';
+    return chip + '<div class="aud-scroll">' + U.table([['When', '150px'], ['By whom', 'minmax(170px,1fr)'], ['What was done', 'minmax(260px,2fr)'], ['How long', '130px']],
+      rows, 'No activity recorded.') + '</div>' + '<p class="mt-2 text-[12px] text-slate-500">' + list.length + ' of ' + (L.total || 0) + ' entries. “How long” is the length of a sign-in, the wait before a decision, the time a challenge took, or a meeting’s length.</p>' + more;
+  }
+  function paintAudit(part) {
+    var box = document.getElementById(part === 'log' ? 'aud-log' : 'aud-users');
+    if (box) box.innerHTML = part === 'log' ? auditLogTable() : auditUsersTable();
+  }
+  var audTimer = null;
+  document.getElementById('content').addEventListener('input', function (e) {
+    if (active !== 'audit' || !AUD) return;
+    if (e.target.id === 'aud-uq') { AUD.uq = e.target.value.trim(); paintAudit('users'); }
+    if (e.target.id === 'aud-q') { AUD.q = e.target.value.trim(); AUD.limit = PAGE; clearTimeout(audTimer); audTimer = setTimeout(function () { loadAudit(true); }, 300); }
+  });
+  document.getElementById('content').addEventListener('change', function (e) {
+    if (active !== 'audit' || !AUD) return;
+    if (e.target.id === 'aud-ust') { AUD.ust = e.target.value; paintAudit('users'); }
+    if (e.target.id === 'aud-area') { AUD.area = e.target.value; AUD.limit = PAGE; loadAudit(true); }
+  });
+  function auditAction(kind, id) {
+    var u = (AUD.users || []).filter(function (x) { return x.id === id; })[0];
+    if (kind === 'more') { AUD.limit += PAGE; return loadAudit(true); }
+    if (kind === 'clear') { AUD.member = ''; AUD.limit = PAGE; return loadAudit(true); }
+    if (kind === 'history') {
+      AUD.member = id; AUD.limit = PAGE; loadAudit(true);
+      var card = document.getElementById('h-aud-l'); if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    if (!u) return;
+    var details = '<dl class="ws-dl mb-3"><div><dt>Member</dt><dd>' + esc(u.name) + ' · ' + esc(u.id) + '</dd></div><div><dt>Role</dt><dd>' + esc(u.role) + '</dd></div>' +
+      '<div><dt>Organisation</dt><dd>' + esc(u.org || '') + '</dd></div><div><dt>Email</dt><dd>' + esc(u.email) + '</dd></div>' +
+      '<div><dt>Registered</dt><dd>' + when(u.joined) + '</dd></div></dl>';
+    var reasonBox = '<div class="ws-field"><label class="label" for="aud-reason">Reason <span class="text-red-600">*</span></label><textarea id="aud-reason" rows="2" class="input"></textarea><span id="aud-reason-err" class="err"></span></div>';
+    var post = function (path, body, demoStatus) {
+      if (live) { API.post('/approvals/users/' + encodeURIComponent(id) + '/' + path, body || {}).then(function (r) { U.toast(r.message, 'ok'); loadAudit(); }).catch(API.fail); return; }
+      u.status = demoStatus; U.toast('Account updated.', 'ok'); renderPanel();
+    };
+    var needReason = function () {
+      var r = (document.getElementById('aud-reason') || {}).value || '';
+      if (r.trim().length < 3) { document.getElementById('aud-reason-err').textContent = 'Give a reason (3+ characters).'; return null; }
+      return r.trim();
+    };
+    if (kind === 'approve') return U.modal('Approve account', details + '<p>' + esc(u.name) + ' will be able to log in and will receive an e-mail.</p>',
+      [{ label: 'Cancel' }, { label: 'Approve & activate', primary: true, onClick: function () { post('approve', {}, 'active'); } }]);
+    if (kind === 'decline') return U.modal('Decline registration', details + reasonBox,
+      [{ label: 'Cancel' }, { label: 'Decline', danger: true, onClick: function () { var r = needReason(); if (!r) return false; post('reject', { reason: r }, 'rejected'); } }]);
+    if (kind === 'lock') return U.modal('Lock account', details + '<p class="mb-3">' + esc(u.name) + ' will be signed out and cannot log in until the account is unlocked.</p>' + reasonBox,
+      [{ label: 'Cancel' }, { label: 'Lock account', danger: true, onClick: function () { var r = needReason(); if (!r) return false; post('lock', { reason: r }, 'locked'); } }]);
+    if (kind === 'unlock') return U.modal('Unlock account', details + '<p>' + esc(u.name) + ' will be able to log in again.</p>',
+      [{ label: 'Cancel' }, { label: 'Unlock account', primary: true, onClick: function () { post('unlock', {}, 'active'); } }]);
   }
 
   /* ---------- read-only detail ---------- */
@@ -479,6 +646,7 @@
     var view = e.target.closest('[data-view]'); if (view) return viewChallenge(view.dataset.view);
     var mo = e.target.closest('[data-mopen]'); if (mo) return showMeeting(mo.dataset.mopen);
     var mc = e.target.closest('[data-mcancel]'); if (mc) return cancelMeeting(mc.dataset.mcancel);
+    var au = e.target.closest('[data-aud]'); if (au) { var a = au.dataset.aud.split('|'); return auditAction(a[0], a[1]); }
     var doBtn = e.target.closest('[data-do]'); if (doBtn) doAction(doBtn.dataset.do, doBtn.dataset.action);
   });
   function cancelMeeting(id) {
@@ -609,10 +777,28 @@
         { id: 'DCC-000003', funded: true, title: 'Student dropout early-warning dashboard', by: 'Kagiso Nkosi', status: 'Open', due: d(50), desc: 'Combine activity and attendance data.', team: [] },
         { id: 'DCC-000001', funded: true, title: 'Expansion of knowledge through communication', by: 'Sbongokuhle Msomi', status: 'In Progress', due: d(24), team: ['Amahle Mthembu'], pct: 45 },
         { id: 'DCC-000002', funded: true, title: 'Cafeteria food-waste reduction study', by: 'Kagiso Nkosi', status: 'In Progress', due: d(3), team: ['Thando Khumalo'], pct: 85 }
+      ] };
+  }
+  function demoAudit() {
+    var h = function (n) { return new Date(Date.now() - n * 3600 * 1000); };
+    return {
+      users: [
+        { id: 'DCC00231', name: 'Dr Lindiwe Mabaso', role: 'Supervisor', org: 'University of Zululand', email: 'l.mabaso@unizulu.ac.za', status: 'pending', joined: h(3), last_login: null, sessions: 0, time_online: 0 },
+        { id: 'DCC00118', name: 'Mr Sifiso Gumede', role: 'Student', org: 'University of Zululand', email: 'sifiso.gumede@unizulu.ac.za', status: 'locked', why: '3 failed login attempts', joined: h(900), last_login: h(30), sessions: 4, time_online: 5400 },
+        { id: 'DCC00011', name: 'Dr Sipho Ndlovu', role: 'Supervisor', org: 'University of Zululand', email: 's.ndlovu@unizulu.ac.za', status: 'active', joined: h(5000), last_login: h(0.2), sessions: 12, time_online: 31000, online: true },
+        { id: 'DCC00002', name: 'Amahle Mthembu', role: 'Student', org: 'University of Zululand', email: 'amahle.mthembu@unizulu.ac.za', status: 'active', joined: h(4000), last_login: h(20), sessions: 7, time_online: 14200 },
+        { id: 'DCC00003', name: 'Sbongokuhle Msomi', role: 'Representative', org: 'BET Media', email: 'sbongokuhle@betmedia.co.za', status: 'active', joined: h(4500), last_login: h(26), sessions: 5, time_online: 6100 }
       ],
-      pending: [{ id: 'DCC00231', name: 'Dr Lindiwe Mabaso', role: 'Supervisor', org: 'University of Zululand', email: 'l.mabaso@unizulu.ac.za', when: d(0) }],
-      locked: [{ id: 'DCC00118', name: 'Mr Sifiso Gumede', why: '3 failed login attempts', ago: 1 }],
-      activity: [{ who: 'System', text: 'auto-assigned a team to DCC-000003.', ago: 1, kind: 'ok' }] };
+      entries: [
+        { at: h(0.2), who: 'Dr Sipho Ndlovu', member: 'DCC00011', role: 'Supervisor', action: 'auth.login', text: 'signed in.', kind: 'info', duration: 720, session: 'active' },
+        { at: h(3), who: 'Dr Lindiwe Mabaso', member: 'DCC00231', role: 'Supervisor', action: 'auth.register', text: 'registered as a Supervisor — awaiting approval.', kind: 'warn' },
+        { at: h(3), who: 'System', member: 'DCC00231', role: 'Supervisor', action: 'email.registration', text: 'sent the confirmation e-mail to l.mabaso@unizulu.ac.za.', kind: 'ok' },
+        { at: h(19), who: 'Amahle Mthembu', member: 'DCC00002', role: 'Student', action: 'challenge.progress', text: 'updated DCC-000001 to 45%: Campaign drafts shared.', kind: 'info' },
+        { at: h(20), who: 'Amahle Mthembu', member: 'DCC00002', role: 'Student', action: 'auth.login', text: 'signed in.', kind: 'info', duration: 1620, session: 'ended' },
+        { at: h(24), who: 'Dr Sipho Ndlovu', member: 'DCC00011', role: 'Supervisor', action: 'challenge.approve', text: 'approved DCC-000003 “Student dropout early-warning dashboard”.', kind: 'ok', duration: 172800 },
+        { at: h(30), who: 'System', member: 'DCC00118', role: 'Student', action: 'account.locked', text: '3 failed login attempts for DCC00118 — account locked.', kind: 'bad' }
+      ]
+    };
   }
   function demoMeetings() {
     if (role === 'supervisor') return { meetings: [

@@ -44,6 +44,7 @@ backend/
 | `UPLOAD_FOLDER` | `instance/uploads` | Uploaded documents and photos |
 | `CORS_ORIGINS` | `*` | Front-end address(es), comma-separated |
 | `TOKEN_MAX_AGE` | `28800` | Seconds a sign-in lasts |
+| `REQUIRE_APPROVAL` | `true` | Keep new accounts pending until an administrator approves them |
 | `SEED_DEMO_DATA` | `true` | Fill a new database with demo data |
 | `HOST` / `PORT` | `127.0.0.1` / `5000` | Where the API listens |
 
