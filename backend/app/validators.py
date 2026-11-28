@@ -10,7 +10,8 @@ PHONE = re.compile(r"^(\+27|0)[6-8]\d{8}$")
 MEMBER_NO = re.compile(r"^DCC\d{5}$", re.I)
 TITLES = {"Mr", "Miss", "Ms", "Mrs", "Dr", "Prof"}
 GENDERS = {"Male", "Female"}
-ROLES = {"student", "supervisor", "representative"}
+ROLES = {"student", "supervisor", "representative"}   # roles a visitor may register for
+ACCOUNT_ROLES = ROLES | {"admin"}                       # admin accounts are created by the system, never by registration
 
 
 def clean_phone(p):

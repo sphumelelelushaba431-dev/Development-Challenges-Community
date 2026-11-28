@@ -86,12 +86,38 @@ def ensure_db(app):
     if os.path.exists(path):
         with app.app_context():
             migrate()
+            ensure_admin()
         return
     with app.app_context():
         init_db()
         if app.config.get("SEED_DEMO_DATA"):
             from .seed import seed
             seed()
+
+
+def ensure_admin():
+    """Older databases had no Administrator role: allow it and create the system administrator (DCC00000)."""
+    from werkzeug.security import generate_password_hash
+    db = get_db()
+    ddl = query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'", one=True)
+    if not ddl:
+        return
+    if "'admin'" not in ddl["sql"]:
+        db.execute("PRAGMA foreign_keys = OFF")
+        db.executescript("BEGIN;" + ddl["sql"].replace("CREATE TABLE users", "CREATE TABLE users_new", 1)
+                         .replace("'representative')", "'representative','admin')", 1) +
+                         ";INSERT INTO users_new SELECT * FROM users; DROP TABLE users; ALTER TABLE users_new RENAME TO users; COMMIT;")
+        db.execute("PRAGMA foreign_keys = ON")
+    if not any(c["name"] == "budget" for c in query("PRAGMA table_info(challenges)")):
+        execute("ALTER TABLE challenges ADD COLUMN budget REAL")
+    if not query("SELECT 1 FROM users WHERE role = 'admin'", one=True):
+        if query("SELECT 1 FROM users WHERE lower(email) = 'admin@devchallenges.community'", one=True):
+            execute("UPDATE users SET email = 'n.mkhize@devchallenges.community' WHERE lower(email) = 'admin@devchallenges.community'")
+        execute("""INSERT INTO users (member_no, role, first_name, surname, email, phone, organisation, password_hash, status, available, record, terms_at)
+                   VALUES ('DCC00000', 'admin', 'System', 'Administrator', 'admin@devchallenges.community', '0359026001',
+                           'Development Challenges Community', ?, 'active', 0, 0, ?)""",
+                (generate_password_hash(current_app.config["ADMIN_PASSWORD"]), now()))
+        execute("INSERT INTO activity (who, text, kind) VALUES ('System', 'created the system Administrator account DCC00000.', 'info')")
 
 
 @click.command("init-db")
@@ -107,7 +133,7 @@ def seed_command():
     from .seed import seed
     init_db()
     seed()
-    click.echo("Database recreated with demo data. Demo password for every account: Demo@1234")
+    click.echo("Database recreated with demo data. Administrator: DCC00000 / %s. Every other demo account: Demo@1234" % current_app.config["ADMIN_PASSWORD"])
 
 
 def init_app(app):

@@ -37,7 +37,7 @@ def profile(u):
 
 
 def me_payload(u):
-    label = {"student": "Student", "supervisor": "Supervisor", "representative": "Representative"}.get(u["role"], u["role"].title())
+    label = {"student": "Student", "supervisor": "Supervisor", "representative": "Representative", "admin": "Administrator"}.get(u["role"], u["role"].title())
     return {"name": full_name(u), "initials": initials(u), "role": u["role"], "roleLabel": label, "meta": label + " · " + u["member_no"],
             "org": u["organisation"], "interests": areas_of(u), "profile": profile(u)}
 
@@ -142,8 +142,14 @@ def notify(user_id, kind, sender, text, about="", ref=""):
     execute("INSERT INTO notifications (user_id, kind, sender, about, text, ref) VALUES (?,?,?,?,?,?)", (user_id, kind, sender, about, text, ref))
 
 
+def notify_admins(kind, sender, text, about=""):
+    """Account approvals are handled by the administrator only."""
+    for a in query("SELECT id FROM users WHERE role = 'admin' AND status = 'active'"):
+        notify(a["id"], kind, sender, text, about)
+
+
 def notify_supervisors(kind, sender, text, about=""):
-    """Approvals and unmatched challenges are handled by supervisors, not an administrator role."""
+    """Challenge reviews and unmatched challenges are handled by supervisors."""
     for s in query("SELECT id FROM users WHERE role = 'supervisor' AND status = 'active'"):
         notify(s["id"], kind, sender, text, about)
 

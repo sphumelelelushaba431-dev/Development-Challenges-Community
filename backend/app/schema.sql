@@ -15,7 +15,7 @@ DROP TABLE IF EXISTS users;
 CREATE TABLE users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   member_no     TEXT    NOT NULL UNIQUE,            -- DCC00001
-  role          TEXT    NOT NULL CHECK (role IN ('student','supervisor','representative')),
+  role          TEXT    NOT NULL CHECK (role IN ('student','supervisor','representative','admin')),
   title         TEXT    NOT NULL DEFAULT '',
   first_name    TEXT    NOT NULL,
   surname       TEXT    NOT NULL,
@@ -47,6 +47,7 @@ CREATE TABLE challenges (
   due_date        TEXT    NOT NULL,
   status          TEXT    NOT NULL DEFAULT 'Submitted',
   funded          TEXT    NOT NULL DEFAULT 'none' CHECK (funded IN ('yes','no','none')),
+  budget          REAL,                               -- funding amount in Rand when funded = 'yes'
   submitted_by    INTEGER NOT NULL REFERENCES users(id),
   supervisor_id   INTEGER REFERENCES users(id),
   areas           TEXT    NOT NULL DEFAULT '[]',     -- JSON [{area, score}] from keyword extraction
@@ -80,7 +81,7 @@ CREATE TABLE progress_updates (
   created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE meetings (                               -- venue stores the mode: Online | In person
+CREATE TABLE meetings (                               -- venue is typed by the supervisor
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   supervisor_id INTEGER NOT NULL REFERENCES users(id),
   challenge_id  INTEGER NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,

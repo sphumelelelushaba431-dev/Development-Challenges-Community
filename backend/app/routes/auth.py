@@ -8,10 +8,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from ..auth import login_required, make_token, read_token
 from ..db import execute, jdump, now, query
 from ..errors import fail
-from ..nlp.taxonomy import AREAS
 from ..emails import send_registration_email
-from ..services import end_session, end_user_sessions, full_name, log, me_payload, notify_supervisors, start_session
-from ..validators import EMAIL, GENDERS, MEMBER_NO, ROLES, TITLES, parse_phone, password_problems, valid_sa_id
+from ..nlp.taxonomy import AREAS
+from ..services import (end_session, end_user_sessions, full_name, log, me_payload, notify_admins, start_session)
+from ..validators import ACCOUNT_ROLES, EMAIL, GENDERS, MEMBER_NO, ROLES, TITLES, parse_phone, password_problems, valid_sa_id
 
 bp = Blueprint("auth", __name__, url_prefix="/api")
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
@@ -61,7 +61,7 @@ def _interests(d):
 
 
 def _next_member_no():
-    row = query("SELECT member_no FROM users ORDER BY id DESC LIMIT 1", one=True)
+    row = query("SELECT member_no FROM users ORDER BY member_no DESC LIMIT 1", one=True)
     n = int(row["member_no"][3:]) + 1 if row else 1
     while query("SELECT 1 FROM users WHERE member_no = ?", ("DCC%05d" % n,), one=True):
         n += 1
@@ -119,29 +119,31 @@ def register():
     photo = _save_photo(request.files.get("photo"))
 
     member_no = _next_member_no()
+    registered_at = now()
     pending = bool(current_app.config["REQUIRE_APPROVAL"])
     status = "pending" if pending else "active"
     uid = execute("""INSERT INTO users (member_no, role, title, first_name, surname, gender, id_number, phone, email, organisation, interest,
                expertise, address, photo, password_hash, status, terms_at, joined_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                   (member_no, role, d["title"], d["first_name"].strip(), d["surname"].strip(), d["gender"], d["id_number"].strip(), phone, email,
                    d["organisation"].strip(), interest, jdump(interests), d["address"].strip(), photo, generate_password_hash(d["password"]),
-                   status, now(), now()))
+                   status, registered_at, registered_at))
     u = query("SELECT * FROM users WHERE id = ?", (uid,), one=True)
     name = full_name(u)
-    log(name, "registered as a %s%s." % (role.title(), " — awaiting approval" if pending else ""), "warn" if pending else "ok",
-        "auth.register", actor=u)
+    log(name, "registered as a %s%s." % (role.title(), " — awaiting approval" if pending else ""),
+        "warn" if pending else "ok", "auth.register", actor=u)
     sent, detail = send_registration_email(u)
-    log("System", ("sent the confirmation e-mail to %s." % email) if sent else ("could not send the confirmation e-mail to %s — %s" % (email, detail)),
+    log("System", ("sent the confirmation e-mail to %s." % email) if sent
+        else ("could not send the confirmation e-mail to %s — %s" % (email, detail)),
         "ok" if sent else "bad", "email.registration", actor=u)
     if pending:
-        notify_supervisors("alert", name, "New %s registration waiting for approval." % role, member_no)
-    msg = "Registration successful. Your Member ID is %s." % member_no
+        notify_admins("alert", name, "New %s registration waiting for approval." % role, member_no)
+    msg = "Registration received. Your Member ID is %s." % member_no
     if sent:
         msg += " A confirmation e-mail with your membership details has been sent to %s." % email
     else:
         msg += " We could not send the confirmation e-mail right now, so please write down your Member ID."
     if pending:
-        msg += " You can log in once a supervisor approves your account."
+        msg += " You can log in once the administrator approves your account."
     else:
         msg += " You can now log in with your Member ID (or e-mail) and the password you chose."
     return jsonify({"member_no": member_no, "status": status, "email_sent": sent, "message": msg}), 201
@@ -162,22 +164,22 @@ def login():
         fail("The Member ID or password is incorrect.", 401)
     if u["status"] == "locked":
         log(full_name(u), "tried to sign in while the account is locked.", "bad", "auth.login_blocked", actor=u)
-        fail("Your account is locked. Contact a supervisor.", 403)
+        fail("Your account is locked after too many failed attempts. Contact the administrator.", 403)
     if not check_password_hash(u["password_hash"], d["password"]):
         tries = u["failed_logins"] + 1
         limit = current_app.config["MAX_FAILED_LOGINS"]
         if tries >= limit:
             execute("UPDATE users SET failed_logins = ?, status = 'locked', locked_at = ? WHERE id = ?", (tries, now(), u["id"]))
             log("System", "%d failed login attempts for %s — account locked." % (tries, u["member_no"]), "bad", "account.locked", actor=u)
-            fail("Too many failed attempts. Your account is now locked; contact a supervisor.", 403)
+            fail("Too many failed attempts. Your account is now locked; contact the administrator.", 403)
         execute("UPDATE users SET failed_logins = ? WHERE id = ?", (tries, u["id"]))
         log(full_name(u), "failed sign-in — wrong password (attempt %d of %d)." % (tries, limit), "warn", "auth.login_failed", actor=u)
         fail("The Member ID or password is incorrect.", 401)
     if u["status"] == "pending":
-        fail("Your account is waiting for supervisor approval.", 403)
+        fail("Your account is waiting for administrator approval.", 403)
     if u["status"] == "rejected":
-        fail("Your registration was not approved. Contact a supervisor.", 403)
-    if u["role"] not in ROLES:
+        fail("Your registration was not approved. Contact the administrator.", 403)
+    if u["role"] not in ACCOUNT_ROLES:
         fail("This account cannot access the workspace.", 403)
     execute("UPDATE users SET failed_logins = 0 WHERE id = ?", (u["id"],))
     sid = start_session(u)

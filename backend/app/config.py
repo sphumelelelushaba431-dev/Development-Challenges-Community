@@ -32,6 +32,7 @@ def _env(name, default, cast=str):
 
 
 class Config:
+    ADMIN_PASSWORD = _env("ADMIN_PASSWORD", "Admin@2026")   # password of the system administrator (DCC00000)
     SECRET_KEY = _env("SECRET_KEY", "change-this-secret-key-in-production")
     DATABASE = _env("DATABASE", os.path.join(BASE_DIR, "instance", "dcc.sqlite3"))
     UPLOAD_FOLDER = _env("UPLOAD_FOLDER", os.path.join(BASE_DIR, "instance", "uploads"))
@@ -41,12 +42,11 @@ class Config:
     TOKEN_MAX_AGE = _env("TOKEN_MAX_AGE", 8 * 3600, int)    # seconds a sign-in lasts
     RESET_MAX_AGE = 30 * 60                                   # password-reset link: 30 minutes
     MAX_FAILED_LOGINS = 3                                     # then the account is locked
-    # False: a new member can log in straight after registering with the Member ID / email and password they chose.
-    # True:  new accounts stay "pending" until a supervisor approves them in the Audit log.
-    REQUIRE_APPROVAL = _env("REQUIRE_APPROVAL", False, bool)
+    # New accounts stay pending until the administrator approves them.
+    REQUIRE_APPROVAL = _env("REQUIRE_APPROVAL", True, bool)
     SESSION_IDLE_MINUTES = 30                                 # a sign-in with no activity for this long counts as ended
     # Where members log in — used in e-mails.
-    APP_URL = _env("APP_URL", "http://localhost:3000")
+    APP_URL = _env("APP_URL", os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:3000"))
 
     # E-mail (SMTP). Registration and approval e-mails are sent when MAIL_SERVER is set.
     # Without it, each e-mail is saved to instance/outbox/ so nothing is lost. Gmail: smtp.gmail.com, port 587,
@@ -71,7 +71,6 @@ class Config:
     SUPERVISOR_CAP = 5        # open challenges per supervisor
     STUDENT_CAP = 3           # active challenges per student
     AUTO_TEAM_SIZE = 3        # students auto-assigned to an approved challenge
-    MEETING_MODES = ("Online", "In person")
 
     # MCDA (see app/mcda.py)
     # Weights come from AHP pairwise judgements (Saaty 1–9 scale: "the first is x times as important as the second").
@@ -88,5 +87,5 @@ class Config:
 class TestConfig(Config):
     TESTING = True
     SEED_DEMO_DATA = True
-    REQUIRE_APPROVAL = False
+    REQUIRE_APPROVAL = True
     MAIL_SUPPRESS_SEND = True

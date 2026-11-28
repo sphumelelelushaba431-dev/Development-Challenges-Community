@@ -1,4 +1,4 @@
-"""Audit log — supervisors only.
+"""Audit log and member sign-in history — administrator only.
 
 GET /api/audit/log     every recorded activity: what was done, by whom, when and how long
                        ?q=text  &member=DCC00002  &area=auth|account|challenge|meeting|profile|email  &limit=  &offset=
@@ -15,7 +15,7 @@ from ..services import full_name, session_seconds
 bp = Blueprint("audit", __name__, url_prefix="/api/audit")
 
 AREAS = ("auth", "account", "challenge", "meeting", "profile", "email")
-ROLE_LABEL = {"student": "Student", "supervisor": "Supervisor", "representative": "Representative"}
+ROLE_LABEL = {"student": "Student", "supervisor": "Supervisor", "representative": "Representative", "admin": "Administrator"}
 
 
 def _idle_cutoff():
@@ -30,7 +30,7 @@ def _session_state(s, cutoff):
 
 
 @bp.get("/log")
-@login_required("supervisor")
+@login_required("admin")
 def audit_log():
     args = request.args
     try:
@@ -69,7 +69,7 @@ def audit_log():
 
 
 @bp.get("/users")
-@login_required("supervisor")
+@login_required("admin")
 def audit_users():
     cutoff = _idle_cutoff()
     stats = {}
@@ -86,7 +86,7 @@ def audit_users():
         st = stats.get(u["id"], {})
         why = None
         if u["status"] == "locked":
-            why = "%d failed login attempts" % u["failed_logins"] if u["failed_logins"] >= current_app.config["MAX_FAILED_LOGINS"] else "Locked by a supervisor"
+            why = "%d failed login attempts" % u["failed_logins"] if u["failed_logins"] >= current_app.config["MAX_FAILED_LOGINS"] else "Locked by an administrator"
         out.append({"id": u["member_no"], "name": full_name(u), "role": ROLE_LABEL.get(u["role"], u["role"].title()),
                     "org": u["organisation"], "email": u["email"], "phone": u["phone"], "status": u["status"], "why": why,
                     "joined": u["joined_at"], "last_login": st.get("last"), "sessions": st.get("sessions", 0),

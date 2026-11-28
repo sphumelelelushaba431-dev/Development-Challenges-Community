@@ -4,7 +4,8 @@ from flask import Blueprint, current_app, g, jsonify
 
 from ..auth import login_required
 from ..db import jload, query
-from ..services import (ACTIVE, OPEN, area_index, full_name, me_payload, supervisor_load, team_of)
+from ..services import (ACTIVE, OPEN, area_index, days_ago, full_name, me_payload, supervisor_load, team_of)
+from .approvals import audit_rows
 from .notifications import for_user
 
 bp = Blueprint("dashboard", __name__, url_prefix="/api")
@@ -21,7 +22,7 @@ def _name(uid):
 
 def _row(ch):
     team = team_of(ch["id"])
-    return {"id": ch["code"], "title": ch["title"], "status": ch["status"], "funded": _funded(ch),
+    return {"id": ch["code"], "title": ch["title"], "status": ch["status"], "funded": _funded(ch), "budget": ch["budget"],
             "by": _name(ch["submitted_by"]), "due": ch["due_date"], "desc": ch["description"],
             "supervisor": _name(ch["supervisor_id"]), "pct": ch["progress"],
             "team": [full_name(s) for s in team], "to": full_name(team[0]) if team else None,
@@ -51,11 +52,25 @@ def student():
 def supervisor():
     me = g.user
     chs = [_row(ch) for ch in query("SELECT * FROM challenges WHERE supervisor_id = ? ORDER BY due_date", (me["id"],))]
-    # Member accounts and the activity history are in the Audit log (routes/audit.py), not here.
     events = [{"date": ch["created"], "kind": "sub", "title": ch["title"]} for ch in chs] + \
              [{"date": ch["completed"], "kind": "done", "title": ch["title"]} for ch in chs if ch["completed"]]
     return jsonify({"me": me_payload(me), "challenges": chs, "cap": current_app.config["SUPERVISOR_CAP"],
                     "load": supervisor_load(me["id"]), "events": events, "notes": for_user(me["id"])})
+
+
+@bp.get("/dashboard/admin")
+@login_required("admin")
+def admin():
+    """The administrator manages user accounts: approvals, locked accounts, all members and the audit log."""
+    me = g.user
+    users = query("SELECT * FROM users WHERE role != 'admin' ORDER BY joined_at DESC")
+    member = lambda u: {"id": u["member_no"], "name": full_name(u), "role": u["role"].title(), "org": u["organisation"],
+                        "email": u["email"], "status": u["status"], "when": u["joined_at"]}
+    pending = [member(u) for u in users if u["status"] == "pending"]
+    locked = [{"id": u["member_no"], "name": full_name(u), "why": "%d failed login attempts" % u["failed_logins"],
+               "ago": days_ago(u["locked_at"] or u["joined_at"])} for u in users if u["status"] == "locked"]
+    return jsonify({"me": me_payload(me), "pending": pending, "locked": locked, "members": [member(u) for u in users],
+                    "audit": audit_rows(limit=200), "events": [], "notes": for_user(me["id"])})
 
 
 @bp.get("/dashboard/representative")

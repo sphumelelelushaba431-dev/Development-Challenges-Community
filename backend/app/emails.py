@@ -43,7 +43,7 @@ def _details(u):
 def send_registration_email(u):
     """Confirmation with the member's ID and details. Returns (sent, detail)."""
     pending = u["status"] == "pending"
-    rows = _details(u) + [("Account status", "Waiting for supervisor approval" if pending else "Active")]
+    rows = _details(u) + [("Account status", "Waiting for administrator approval" if pending else "Active")]
     url = _login_url()
     greeting = "Dear %s," % full_name(u)
     intro = "Thank you for registering with Development Challenges Community. Your membership details are below — keep this e-mail for your records."
@@ -51,7 +51,7 @@ def send_registration_email(u):
              "Enter your Member ID <b>%s</b> (or your e-mail address)." % escape(u["member_no"]),
              "Enter the password you chose when you registered."]
     if pending:
-        steps.insert(0, "Wait for the e-mail that tells you a supervisor has approved your account.")
+        steps.insert(0, "Wait for the e-mail that tells you the administrator has approved your account.")
     closing = ("For your security we never send passwords by e-mail. If you did not register, please ignore this message "
                "or contact the community administrators.")
     text = "\n".join([greeting, "", intro, ""] + ["%-18s %s" % (k + ":", v) for k, v in rows] + ["", "How to log in:"] +

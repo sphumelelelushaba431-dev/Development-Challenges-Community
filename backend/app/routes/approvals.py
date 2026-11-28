@@ -1,7 +1,7 @@
-"""Managing member accounts — performed by supervisors from the Audit log.
+"""User-account management and the audit log — performed by the Administrator only.
 
-There is no Administrator role. Supervisors approve/decline registrations (when REQUIRE_APPROVAL is on),
-lock and unlock accounts, and see every member's activity (routes/audit.py).
+The administrator approves or declines new registrations, unlocks accounts locked after failed
+logins, and reads the audit log. Supervisors, representatives and students cannot manage accounts.
 """
 from flask import Blueprint, current_app, g, jsonify, request
 
@@ -13,11 +13,15 @@ from ..services import days_ago, end_user_sessions, full_name, log, notify, seco
 
 bp = Blueprint("approvals", __name__, url_prefix="/api/approvals")
 
+AUDIT_KINDS = ("ok", "bad", "warn", "info")
+
 
 def _user(member_no):
     u = query("SELECT * FROM users WHERE upper(member_no) = upper(?)", (member_no,), one=True)
     if not u:
         fail("Member not found.", 404)
+    if u["role"] == "admin":
+        fail("Administrator accounts cannot be changed here.", 403)
     return u
 
 
@@ -27,15 +31,15 @@ def member_row(u):
 
 
 @bp.get("/users")
-@login_required("supervisor")
+@login_required("admin")
 def users():
     role, status = request.args.get("role"), request.args.get("status")
-    rows = query("SELECT * FROM users ORDER BY id DESC")
+    rows = query("SELECT * FROM users WHERE role != 'admin' ORDER BY id DESC")
     return jsonify([member_row(u) for u in rows if (not role or u["role"] == role) and (not status or u["status"] == status)])
 
 
 @bp.post("/users/<member_no>/approve")
-@login_required("supervisor")
+@login_required("admin")
 def approve(member_no):
     u = _user(member_no)
     if u["status"] != "pending":
@@ -49,7 +53,7 @@ def approve(member_no):
 
 
 @bp.post("/users/<member_no>/reject")
-@login_required("supervisor")
+@login_required("admin")
 def reject(member_no):
     u = _user(member_no)
     reason = ((request.get_json(silent=True) or {}).get("reason") or "").strip()
@@ -62,7 +66,7 @@ def reject(member_no):
 
 
 @bp.post("/users/<member_no>/lock")
-@login_required("supervisor")
+@login_required("admin")
 def lock(member_no):
     u = _user(member_no)
     if u["id"] == g.user["id"]:
@@ -79,7 +83,7 @@ def lock(member_no):
 
 
 @bp.post("/users/<member_no>/unlock")
-@login_required("supervisor")
+@login_required("admin")
 def unlock(member_no):
     u = _user(member_no)
     if u["status"] != "locked":
@@ -90,8 +94,39 @@ def unlock(member_no):
     return jsonify({"message": "%s unlocked." % full_name(u)})
 
 
+def audit_rows(q="", kind="", limit=200):
+    sql, args = "SELECT * FROM activity WHERE 1 = 1", []
+    if kind in AUDIT_KINDS:
+        sql += " AND kind = ?"
+        args.append(kind)
+    if q:
+        sql += " AND (lower(who) LIKE ? OR lower(text) LIKE ?)"
+        args += ["%" + q.lower() + "%"] * 2
+    sql += " ORDER BY id DESC LIMIT ?"
+    args.append(max(1, min(int(limit), 1000)))
+    return [{"id": a["id"], "who": a["who"], "text": a["text"], "kind": a["kind"], "at": a["created_at"], "ago": days_ago(a["created_at"])}
+            for a in query(sql, args)]
+
+
+@bp.get("/audit")
+@login_required("admin")
+def audit():
+    """The audit log: every recorded action, newest first. ?q=search text  ?kind=ok|bad|warn|info  ?limit=200"""
+    try:
+        limit = int(request.args.get("limit", 200))
+    except ValueError:
+        limit = 200
+    return jsonify(audit_rows((request.args.get("q") or "").strip(), request.args.get("kind") or "", limit))
+
+
+@bp.get("/activity")
+@login_required("admin")
+def activity():
+    return jsonify(audit_rows(limit=100))
+
+
 @bp.get("/locked")
-@login_required("supervisor")
+@login_required("admin")
 def locked():
     return jsonify([{"id": u["member_no"], "name": full_name(u), "why": "%d failed login attempts" % u["failed_logins"],
                      "ago": days_ago(u["locked_at"] or now())}
@@ -99,7 +134,7 @@ def locked():
 
 
 @bp.get("/mcda")
-@login_required("supervisor")
+@login_required("admin", "supervisor")
 def mcda_settings():
     """The MCDA set-up in use: AHP weights, consistency ratio, threshold and ranking method."""
     c = current_app.config
